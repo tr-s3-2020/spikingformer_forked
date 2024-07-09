@@ -1,0 +1,492 @@
+INDEX NUMBER: 0
+Original image diff sparsity: tensor(0.9874, device='cuda:0')
+Original image sparsity: tensor(0.3382, device='cuda:0')
+Tokenizing...
+Tokenizer sparsity nodiff 1: tensor(0.6540, device='cuda:0')
+Tokenizer sparsity delta 1: tensor(0.9871, device='cuda:0')
+Tokenizer sparsity nodiff 2: tensor(0.9263, device='cuda:0')
+Tokenizer sparsity delta 2: tensor(0.9689, device='cuda:0')
+Tokenizer sparsity nodiff 3: tensor(0.9512, device='cuda:0')
+Tokenizer sparsity delta 3: tensor(0.9565, device='cuda:0')
+Tokenizer sparsity nodiff 4: tensor(0.9567, device='cuda:0')
+Tokenizer sparsity delta 4: tensor(0.9522, device='cuda:0')
+ATTENTION BLOCK 0
+Attention sparsity nodiff x: tensor(0.8588, device='cuda:0')
+Attention sparsity delta x: tensor(0.9807, device='cuda:0')
+Attention sparsity nodiff q: tensor(0.8908, device='cuda:0')
+Attention sparsity delta q: tensor(0.9767, device='cuda:0')
+Attention sparsity nodiff k: tensor(0.9784, device='cuda:0')
+Attention sparsity delta k: tensor(0.9922, device='cuda:0')
+Attention sparsity nodiff v: tensor(0.9499, device='cuda:0')
+Attention sparsity delta v: tensor(0.9847, device='cuda:0')
+Attention sparsity delta delta_kv: tensor(0.9637, device='cuda:0')
+Attention sparsity nodiff qkv: tensor(0.8087, device='cuda:0')
+Attention sparsity delta qkv: tensor(0.9491, device='cuda:0')
+MLP sparsity nodiff 1: tensor(0.7902, device='cuda:0')
+MLP sparsity delta 1: tensor(0.9476, device='cuda:0')
+MLP sparsity nodiff 2: tensor(0.9782, device='cuda:0')
+MLP sparsity delta 2: tensor(0.9863, device='cuda:0')
+ATTENTION BLOCK 1
+Attention sparsity nodiff x: tensor(0.9835, device='cuda:0')
+Attention sparsity delta x: tensor(0.9888, device='cuda:0')
+Attention sparsity nodiff q: tensor(0.9350, device='cuda:0')
+Attention sparsity delta q: tensor(0.9591, device='cuda:0')
+Attention sparsity nodiff k: tensor(0.9777, device='cuda:0')
+Attention sparsity delta k: tensor(0.9872, device='cuda:0')
+Attention sparsity nodiff v: tensor(0.9351, device='cuda:0')
+Attention sparsity delta v: tensor(0.9543, device='cuda:0')
+Attention sparsity delta delta_kv: tensor(0.9797, device='cuda:0')
+Attention sparsity nodiff qkv: tensor(0.9014, device='cuda:0')
+Attention sparsity delta qkv: tensor(0.9516, device='cuda:0')
+MLP sparsity nodiff 1: tensor(0.9861, device='cuda:0')
+MLP sparsity delta 1: tensor(0.9886, device='cuda:0')
+MLP sparsity nodiff 2: tensor(0.9803, device='cuda:0')
+MLP sparsity delta 2: tensor(0.9888, device='cuda:0')
+ATTENTION BLOCK 2
+Attention sparsity nodiff x: tensor(0.9856, device='cuda:0')
+Attention sparsity delta x: tensor(0.9861, device='cuda:0')
+Attention sparsity nodiff q: tensor(0.9068, device='cuda:0')
+Attention sparsity delta q: tensor(0.9427, device='cuda:0')
+Attention sparsity nodiff k: tensor(0.9598, device='cuda:0')
+Attention sparsity delta k: tensor(0.9801, device='cuda:0')
+Attention sparsity nodiff v: tensor(0.9245, device='cuda:0')
+Attention sparsity delta v: tensor(0.9469, device='cuda:0')
+Attention sparsity delta delta_kv: tensor(0.9740, device='cuda:0')
+Attention sparsity nodiff qkv: tensor(0.8719, device='cuda:0')
+Attention sparsity delta qkv: tensor(0.9596, device='cuda:0')
+MLP sparsity nodiff 1: tensor(0.9800, device='cuda:0')
+MLP sparsity delta 1: tensor(0.9824, device='cuda:0')
+MLP sparsity nodiff 2: tensor(0.9842, device='cuda:0')
+MLP sparsity delta 2: tensor(0.9892, device='cuda:0')
+ATTENTION BLOCK 3
+Attention sparsity nodiff x: tensor(0.9795, device='cuda:0')
+Attention sparsity delta x: tensor(0.9801, device='cuda:0')
+Attention sparsity nodiff q: tensor(0.9491, device='cuda:0')
+Attention sparsity delta q: tensor(0.9653, device='cuda:0')
+Attention sparsity nodiff k: tensor(0.9653, device='cuda:0')
+Attention sparsity delta k: tensor(0.9878, device='cuda:0')
+Attention sparsity nodiff v: tensor(0.8916, device='cuda:0')
+Attention sparsity delta v: tensor(0.9146, device='cuda:0')
+Attention sparsity delta delta_kv: tensor(0.9802, device='cuda:0')
+Attention sparsity nodiff qkv: tensor(0.8785, device='cuda:0')
+Attention sparsity delta qkv: tensor(0.9310, device='cuda:0')
+MLP sparsity nodiff 1: tensor(0.9673, device='cuda:0')
+MLP sparsity delta 1: tensor(0.9665, device='cuda:0')
+MLP sparsity nodiff 2: tensor(0.9880, device='cuda:0')
+MLP sparsity delta 2: tensor(0.9904, device='cuda:0')
+ATTENTION BLOCK 4
+Attention sparsity nodiff x: tensor(0.9654, device='cuda:0')
+Attention sparsity delta x: tensor(0.9582, device='cuda:0')
+Attention sparsity nodiff q: tensor(0.9482, device='cuda:0')
+Attention sparsity delta q: tensor(0.9664, device='cuda:0')
+Attention sparsity nodiff k: tensor(0.9765, device='cuda:0')
+Attention sparsity delta k: tensor(0.9884, device='cuda:0')
+Attention sparsity nodiff v: tensor(0.7580, device='cuda:0')
+Attention sparsity delta v: tensor(0.8138, device='cuda:0')
+Attention sparsity delta delta_kv: tensor(0.9698, device='cuda:0')
+Attention sparsity nodiff qkv: tensor(0.6948, device='cuda:0')
+Attention sparsity delta qkv: tensor(0.8854, device='cuda:0')
+MLP sparsity nodiff 1: tensor(0.9427, device='cuda:0')
+MLP sparsity delta 1: tensor(0.9407, device='cuda:0')
+MLP sparsity nodiff 2: tensor(0.9920, device='cuda:0')
+MLP sparsity delta 2: tensor(0.9932, device='cuda:0')
+ATTENTION BLOCK 5
+Attention sparsity nodiff x: tensor(0.9720, device='cuda:0')
+Attention sparsity delta x: tensor(0.9629, device='cuda:0')
+Attention sparsity nodiff q: tensor(0.9442, device='cuda:0')
+Attention sparsity delta q: tensor(0.9611, device='cuda:0')
+Attention sparsity nodiff k: tensor(0.9834, device='cuda:0')
+Attention sparsity delta k: tensor(0.9892, device='cuda:0')
+Attention sparsity nodiff v: tensor(0.8511, device='cuda:0')
+Attention sparsity delta v: tensor(0.8674, device='cuda:0')
+Attention sparsity delta delta_kv: tensor(0.9719, device='cuda:0')
+Attention sparsity nodiff qkv: tensor(0.8293, device='cuda:0')
+Attention sparsity delta qkv: tensor(0.9134, device='cuda:0')
+MLP sparsity nodiff 1: tensor(0.9262, device='cuda:0')
+MLP sparsity delta 1: tensor(0.9185, device='cuda:0')
+MLP sparsity nodiff 2: tensor(0.9835, device='cuda:0')
+MLP sparsity delta 2: tensor(0.9820, device='cuda:0')
+ATTENTION BLOCK 6
+Attention sparsity nodiff x: tensor(0.7791, device='cuda:0')
+Attention sparsity delta x: tensor(0.8026, device='cuda:0')
+Attention sparsity nodiff q: tensor(0.9510, device='cuda:0')
+Attention sparsity delta q: tensor(0.9534, device='cuda:0')
+Attention sparsity nodiff k: tensor(0.9772, device='cuda:0')
+Attention sparsity delta k: tensor(0.9742, device='cuda:0')
+Attention sparsity nodiff v: tensor(0.8948, device='cuda:0')
+Attention sparsity delta v: tensor(0.8977, device='cuda:0')
+Attention sparsity delta delta_kv: tensor(0.9463, device='cuda:0')
+Attention sparsity nodiff qkv: tensor(0.8646, device='cuda:0')
+Attention sparsity delta qkv: tensor(0.9234, device='cuda:0')
+MLP sparsity nodiff 1: tensor(0.7923, device='cuda:0')
+MLP sparsity delta 1: tensor(0.8057, device='cuda:0')
+MLP sparsity nodiff 2: tensor(0.9980, device='cuda:0')
+MLP sparsity delta 2: tensor(0.9971, device='cuda:0')
+ATTENTION BLOCK 7
+Attention sparsity nodiff x: tensor(0.9510, device='cuda:0')
+Attention sparsity delta x: tensor(0.9161, device='cuda:0')
+Attention sparsity nodiff q: tensor(0.6140, device='cuda:0')
+Attention sparsity delta q: tensor(0.7906, device='cuda:0')
+Attention sparsity nodiff k: tensor(0.8960, device='cuda:0')
+Attention sparsity delta k: tensor(0.9211, device='cuda:0')
+Attention sparsity nodiff v: tensor(0.5938, device='cuda:0')
+Attention sparsity delta v: tensor(0.9178, device='cuda:0')
+Attention sparsity delta delta_kv: tensor(0.8718, device='cuda:0')
+Attention sparsity nodiff qkv: tensor(0.6106, device='cuda:0')
+Attention sparsity delta qkv: tensor(0.8787, device='cuda:0')
+MLP sparsity nodiff 1: tensor(0.7621, device='cuda:0')
+MLP sparsity delta 1: tensor(0.8098, device='cuda:0')
+MLP sparsity nodiff 2: tensor(0.9574, device='cuda:0')
+MLP sparsity delta 2: tensor(0.9350, device='cuda:0')INDEX NUMBER: 0
+Original image diff sparsity: tensor(0.9874, device='cuda:0')
+Original image sparsity: tensor(0.3382, device='cuda:0')
+Tokenizing...
+Tokenizer sparsity nodiff 1: tensor(0.6540, device='cuda:0')
+Tokenizer sparsity delta 1: tensor(0.9871, device='cuda:0')
+Tokenizer sparsity nodiff 2: tensor(0.9263, device='cuda:0')
+Tokenizer sparsity delta 2: tensor(0.9689, device='cuda:0')
+Tokenizer sparsity nodiff 3: tensor(0.9512, device='cuda:0')
+Tokenizer sparsity delta 3: tensor(0.9565, device='cuda:0')
+Tokenizer sparsity nodiff 4: tensor(0.9567, device='cuda:0')
+Tokenizer sparsity delta 4: tensor(0.9522, device='cuda:0')
+ATTENTION BLOCK 0
+Attention sparsity nodiff x: tensor(0.8588, device='cuda:0')
+Attention sparsity delta x: tensor(0.9807, device='cuda:0')
+Attention sparsity nodiff q: tensor(0.8908, device='cuda:0')
+Attention sparsity delta q: tensor(0.9767, device='cuda:0')
+Attention sparsity nodiff k: tensor(0.9784, device='cuda:0')
+Attention sparsity delta k: tensor(0.9922, device='cuda:0')
+Attention sparsity nodiff v: tensor(0.9499, device='cuda:0')
+Attention sparsity delta v: tensor(0.9847, device='cuda:0')
+INDEX NUMBER: 0
+Original image diff sparsity: tensor(0.9874, device='cuda:0')
+Original image sparsity: tensor(0.3382, device='cuda:0')
+Tokenizing...
+Tokenizer sparsity nodiff 1: tensor(0.6540, device='cuda:0')
+Tokenizer sparsity delta 1: tensor(0.9871, device='cuda:0')
+Tokenizer sparsity nodiff 2: tensor(0.9263, device='cuda:0')
+Tokenizer sparsity delta 2: tensor(0.9689, device='cuda:0')
+Tokenizer sparsity nodiff 3: tensor(0.9512, device='cuda:0')
+Tokenizer sparsity delta 3: tensor(0.9565, device='cuda:0')
+Tokenizer sparsity nodiff 4: tensor(0.9567, device='cuda:0')
+Tokenizer sparsity delta 4: tensor(0.9522, device='cuda:0')
+ATTENTION BLOCK 0
+Attention sparsity nodiff x: tensor(0.8588, device='cuda:0')
+Attention sparsity delta x: tensor(0.9807, device='cuda:0')
+Attention sparsity nodiff q: tensor(0.8908, device='cuda:0')
+Attention sparsity delta q: tensor(0.9767, device='cuda:0')
+Attention sparsity nodiff k: tensor(0.9784, device='cuda:0')
+Attention sparsity delta k: tensor(0.9922, device='cuda:0')
+Attention sparsity nodiff v: tensor(0.9499, device='cuda:0')
+Attention sparsity delta v: tensor(0.9847, device='cuda:0')
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7
+Tokenizing...
+ATTENTION BLOCK 0
+ATTENTION BLOCK 1
+ATTENTION BLOCK 2
+ATTENTION BLOCK 3
+ATTENTION BLOCK 4
+ATTENTION BLOCK 5
+ATTENTION BLOCK 6
+ATTENTION BLOCK 7

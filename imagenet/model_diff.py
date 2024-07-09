@@ -43,205 +43,81 @@ total_OPS = 0
 #             break
 #         t = t + 1
 #     return t
+T
+def calculate_latency_for_mm_bsl(a,b): # matrix multiplication latency baseline, calculate A * B
+    , B, D, N = a.shape
+    # print(x.shape, D)
+    Och_num = 256
+    latency_per_pixel = torch.ones(N) #至少需要1个周期来判断非零值, 考虑padding
+    for n in range(N):
+        if (x[:,batch_id,:,n] != 0).sum() != 0:
+            nonzero_ich_idx = x[:,batch_id,:,n].nonzero()[:,1].unique()                        
+            weight_raddr = (nonzero_ich_idx % ich_parallel_num).int()
+            latency_per_pixel[n] = weight_raddr.unique(return_counts = True)[1].max()
+    
+    # print(latency_per_pixel)
+    compute_latency = np.ceil(D/Och_num) * latency_per_pixel.sum()
+    OPs = N*d*D*2
+    global total_OPS
+    total_OPS += OPs
+    # print('Layer OP:',OPs)
 
-def calculate_latency_for_qkvmm_nonlif_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
-    T, B, head, H, W = a.shape
-    # maximum H and W based on PE and on-chip buffer size
-    buffer_size = 32 * 1024
-    Max_H = 256
-    Max_W = buffer_size / (16 * add_in_width1 * T / 8 + 256 * add_in_width0 * T / 8)
-    load_latency = 0
-    compute_latency_pT = 0
-    compute_latency = 0
-    store_latency_pT = 0
-    store_latency = 0
-    if H <= Max_H or W <= Max_W:
-        load_latency = (H * W * add_in_width0 * T + H * W * add_in_width1 * T) / 32 # overall bits / bandwidth
-        compute_latency_pT = (16 + H + 4) * np.ceil(W/16)
-        compute_latency = compute_latency_pT * T
-        store_latency_pT = (H * H * 16) / 32
-        store_latency = store_latency_pT * T
-        latency_a = load_latency + compute_latency + store_latency
-        # print(latency_a)
-        latency_a = latency_a * head
-    return latency_a
+    # compute_latency = np.floor(D/Och_num) * latency_per_pixel.sum()
+    # OPs = N*(d-72)*d*2
+    total_spike = ((x == 1).sum())*D
+    global total_spike_all
+    total_spike_all += total_spike
+    task_energy = ((power * 1e-3) * (compute_latency * (1000/frequency) * 1e-9)) * 1e3
+    pJ_SOP = task_energy / total_spike * 1e9
 
-def calculate_latency_for_qkvmm_lif_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
-    T, B, head, H, W = a.shape
-    # maximum H and W based on PE and on-chip buffer size
-    buffer_size = 32 * 1024
-    Max_H = 256
-    Max_W = buffer_size / (16 * add_in_width1 * T / 8 + 256 * add_in_width0 * T / 8)
-    load_latency = 0
-    compute_latency_pT = 0
-    compute_latency = 0
-    lif_latency_pT = 0
-    lif_latency = 0
-    store_latency_pT = 0
-    store_latency = 0
-    if H <= Max_H or W <= Max_W:
-        load_latency = (H * W * add_in_width0 * T + H * W * add_in_width1 * T) / 32 # overall bits / bandwidth
-        compute_latency_pT = (16 + H + 4) * np.ceil(W/16)
-        compute_latency = compute_latency_pT * T
-        lif_latency_pT= H
-        lif_latency = lif_latency_pT * T
-        store_latency_pT = (H * H) / 32
-        store_latency = store_latency_pT * T
-        latency_a = load_latency + compute_latency + lif_latency + store_latency
-        # print(latency_a)
-        latency_a = latency_a * head
-    return latency_a
+    efficiency = (OPs / (compute_latency * (1000/frequency) * 1e-9))/1e12  / (power * 1e-3)
+    throughput = (OPs / (compute_latency * (1000/frequency) * 1e-9))/1e12
+    # print('latency:',compute_latency * (1000/frequency),'ns')
+    # print('sparsity:',(x==0).sum() / (x.view(-1).shape[0]))
+    # print('efficiency',efficiency,'throughput',throughput,'pJ/SOP',pJ_SOP)
 
-def calculate_latency_for_qkvgen_lif_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
-    T1, B1, H1, W1 = a.shape
-    T2, B2, H2, W2 = b.shape
-    W2 = 3 * W2
-    # maximum H and W based on PE and on-chip buffer size
-    buffer_size = 32 * 1024
-    Max_H1 = 256
-    Max_W2 = 256
-    Max_W1_H2 = buffer_size / (256 * add_in_width0 / 8 + 16 * add_in_width1 / 8)
-    load_latency = 0
-    compute_latency_pT = 0
-    compute_latency = 0
-    lif_latency_pT = 0
-    lif_latency = 0
-    store_latency_pT = 0
-    store_latency = 0
-    if (H1 <= Max_H1 and W1 <= Max_W1_H2) or (H2 <= Max_W1_H2 and W2 <= Max_W2):
-        load_latency = (H1 * W1 * add_in_width0 * T1 + H2 * W2 * add_in_width1) / 32 # overall bits / bandwidth
-        compute_latency_pT = (16 + H1 + 4) * np.ceil(W1/16) * np.ceil(W2/256)
-        compute_latency = compute_latency_pT * T1
-        lif_latency_pT= H1 * np.ceil(W2/256)
-        lif_latency = lif_latency_pT * T1
-        store_latency_pT = (H1 * W2) / 32
-        store_latency = store_latency_pT * T1
-        latency_a = load_latency + compute_latency + lif_latency + store_latency
-        # print(latency_a)
-    elif (H1 <= Max_H1) or (W2 <= Max_W2): # activation first
-        load_latency = (H1 * W1 * add_in_width0 * T1 * np.ceil(W2/256) + H2 * W2 * add_in_width1) / 32 # overall bits / bandwidth
-        compute_latency_pT = (16 + H1 + 4) * np.ceil(W1/16) * np.ceil(W2/256)
-        compute_latency = compute_latency_pT * T1
-        lif_latency_pT= H1 * np.ceil(W2/256)
-        lif_latency = lif_latency_pT * T1
-        store_latency_pT = (H1 * W2) / 32
-        store_latency = store_latency_pT * T1
-        latency_a = load_latency + compute_latency + lif_latency + store_latency
-    return latency_a
+    global ema
+    ema[0] += (D / 8) * N * d
+    ema[1] += D * d
+    ema[2] += D * n
+    ema[3] += D * n * (d/64) * 2 * 8
+    return compute_latency
 
-def calculate_latency_for_proj_lif_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
-    T1, B1, H1, W1 = a.shape
-    T2, B2, H2, W2 = b.shape
-    # maximum H and W based on PE and on-chip buffer size
-    buffer_size = 32 * 1024
-    Max_H1 = 256
-    Max_W2 = 256
-    Max_W1_H2 = buffer_size / (256 * add_in_width0 / 8 + 16 * add_in_width1 / 8)
-    load_latency = 0
-    compute_latency_pT = 0
-    compute_latency = 0
-    lif_latency_pT = 0
-    lif_latency = 0
-    store_latency_pT = 0
-    store_latency = 0
-    if (H1 <= Max_H1 and W1 <= Max_W1_H2) or (H2 <= Max_W1_H2 and W2 <= Max_W2):
-        load_latency = (H1 * W1 * add_in_width0 * T1 + H2 * W2 * add_in_width1) / 32 # overall bits / bandwidth
-        compute_latency_pT = (16 + H1 + 4) * np.ceil(W1/16) * np.ceil(W2/256)
-        compute_latency = compute_latency_pT * T1
-        lif_latency_pT= H1 * np.ceil(W2/256)
-        lif_latency = lif_latency_pT * T1
-        store_latency_pT = (H1 * W2) / 32
-        store_latency = store_latency_pT * T1
-        latency_a = load_latency + compute_latency + lif_latency + store_latency
-        # print(latency_a)
-    elif (H1 <= Max_H1) or (W2 <= Max_W2): # activation first
-        load_latency = (H1 * W1 * add_in_width0 * T1 * np.ceil(W2/256) + H2 * W2 * add_in_width1) / 32 # overall bits / bandwidth
-        compute_latency_pT = (16 + H1 + 4) * np.ceil(W1/16) * np.ceil(W2/256)
-        compute_latency = compute_latency_pT * T1
-        lif_latency_pT= H1 * np.ceil(W2/256)
-        lif_latency = lif_latency_pT * T1
-        store_latency_pT = (H1 * W2) / 32
-        store_latency = store_latency_pT * T1
-        latency_a = load_latency + compute_latency + lif_latency + store_latency
-    return latency_a
+# def calculate_latency_for_attn_bsl(q,k): # attention latency baseline, calculate q*(k*v)
+#     T, B, D, N = q.shape
+#     Och_num = 8*9
+#     latency_per_pixel_k = torch.ones(D) #至少需要1个周期来判断非零值, 考虑padding
+#     for d in range(D):
+#         if ((k[:,batch_id,d,:] != 0).sum() != 0):
+#             nonzero_ich_idx = k[:,batch_id,d,:].nonzero()[:,1].unique()
+#             weight_raddr = (nonzero_ich_idx % ich_parallel_num).int()
+#             latency_per_pixel_k[d] = weight_raddr.unique(return_counts = True)[1].max()
+    
+#     latency_per_pixel_q = torch.ones(N) #至少需要1个周期来判断非零值, 考虑padding
+#     for n in range(N):
+#         if (q[:,batch_id,:,n] != 0).sum() != 0:
+#             nonzero_ich_idx = q[:,batch_id,:,n].nonzero()[:,1].unique()
+#             weight_raddr = (nonzero_ich_idx % ich_parallel_num).int()
+#             latency_per_pixel_q[n] = weight_raddr.unique(return_counts = True)[1].max()
 
-def calculate_latency_lif_bl(a): # lif latency baseline
-    T1, B1, C1, H1, W1 = a.shape
-    bw = 256
-    latency_a = T1 * B1 * C1 * H1 * W1 / bw
-    return latency_a
+#     compute_latency = np.ceil(d/Och_num) * (latency_per_pixel_k.sum() + latency_per_pixel_q.sum())
+#     OPs = N*D*D*2*2
+#     # print('Layer OP:',OPs)
+#     global total_OPS
+#     total_OPS += OPs
 
-def calculate_latency_for_mlp_lif_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
-    T1, W1, Hh1, Hw1 = a.shape
-    T2, W2, Hh2, Hw2 = b.shape
-    H1 = Hh1 * Hw1
-    H2 = Hh2 * Hw2
-    # maximum H and W based on PE and on-chip buffer size
-    buffer_size = 32 * 1024
-    Max_H1 = 256
-    Max_W2 = 256
-    Max_W1_H2 = buffer_size / (256 * add_in_width0 / 8 + 16 * add_in_width1 / 8)
-    load_latency = 0
-    compute_latency_pT = 0
-    compute_latency = 0
-    lif_latency_pT = 0
-    lif_latency = 0
-    store_latency_pT = 0
-    store_latency = 0
-    if (H1 <= Max_H1 and W1 <= Max_W1_H2) or (H2 <= Max_W1_H2 and W2 <= Max_W2):
-        load_latency = (H1 * W1 * add_in_width0 * T1 + H2 * W2 * add_in_width1) / 32 # overall bits / bandwidth
-        compute_latency_pT = (16 + H1 + 4) * np.ceil(W1/16) * np.ceil(W2/256)
-        compute_latency = compute_latency_pT * T1
-        lif_latency_pT= H1 * np.ceil(W2/256)
-        lif_latency = lif_latency_pT * T1
-        store_latency_pT = (H1 * W2) / 32
-        store_latency = store_latency_pT * T1
-        latency_a = load_latency + compute_latency + lif_latency + store_latency
-        # print(latency_a)
-    elif (H1 <= Max_H1) or (W2 <= Max_W2): # activation first
-        load_latency = (H1 * W1 * add_in_width0 * T1 * np.ceil(W2/256) + H2 * W2 * add_in_width1) / 32 # overall bits / bandwidth
-        compute_latency_pT = (16 + H1 + 4) * np.ceil(W1/16) * np.ceil(W2/256)
-        compute_latency = compute_latency_pT * T1
-        lif_latency_pT= H1 * np.ceil(W2/256)
-        lif_latency = lif_latency_pT * T1
-        store_latency_pT = (H1 * W2) / 32
-        store_latency = store_latency_pT * T1
-        latency_a = load_latency + compute_latency + lif_latency + store_latency
-    return latency_a
+#     global total_spike_all
+#     total_spike = ((q == 1).sum() + (k==1).sum()) * D
+#     total_spike_all += total_spike
+#     task_energy = ((power * 1e-3) * (compute_latency * (1000/frequency) * 1e-9)) * 1e3
+#     pJ_SOP = task_energy / total_spike * 1e9
+#     efficiency = (OPs / (compute_latency * (1000/frequency) * 1e-9))/1e12  / (power * 1e-3)
+#     throughput = (OPs / (compute_latency * (1000/frequency) * 1e-9))/1e12
+#     # print('latency:',compute_latency * (1000/frequency),'ns')
+#     # print('k sparsity',(k==0).sum() / (k.view(-1).shape[0]), 'q sparsity:',(q.mean(0)==0).sum() / (q.mean(0).view(-1).shape[0]))
+#     # print('efficiency',efficiency,'throughput',throughput, 'pJ/SOP',pJ_SOP)
 
-def calculate_latency_for_mlp_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
-    T1, W1, Hh1, Hw1 = a.shape
-    T2, W2, Hh2, Hw2 = b.shape
-    H1 = Hh1 * Hw1
-    H2 = Hh2 * Hw2
-    # maximum H and W based on PE and on-chip buffer size
-    buffer_size = 32 * 1024
-    Max_H1 = 256
-    Max_W2 = 256
-    Max_W1_H2 = buffer_size / (256 * add_in_width0 / 8 + 16 * add_in_width1 / 8)
-    load_latency = 0
-    compute_latency_pT = 0
-    compute_latency = 0
-    lif_latency_pT = 0
-    lif_latency = 0
-    store_latency_pT = 0
-    store_latency = 0
-    if (H1 <= Max_H1 and W1 <= Max_W1_H2) or (H2 <= Max_W1_H2 and W2 <= Max_W2):
-        load_latency = (H1 * W1 * add_in_width0 * T1 + H2 * W2 * add_in_width1) / 32 # overall bits / bandwidth
-        compute_latency_pT = (16 + H1 + 4) * np.ceil(W1/16) * np.ceil(W2/256)
-        compute_latency = compute_latency_pT * T1
-        store_latency_pT = (H1 * W2 * 16) / 32
-        store_latency = store_latency_pT * T1
-        latency_a = load_latency + compute_latency + lif_latency + store_latency
-        # print(latency_a)
-    elif (H1 <= Max_H1) or (W2 <= Max_W2): # activation first
-        load_latency = (H1 * W1 * add_in_width0 * T1 * np.ceil(W2/256) + H2 * W2 * add_in_width1) / 32 # overall bits / bandwidth
-        compute_latency_pT = (16 + H1 + 4) * np.ceil(W1/16) * np.ceil(W2/256)
-        compute_latency = compute_latency_pT * T1
-        store_latency_pT = (H1 * W2 * 16) / 32
-        store_latency = store_latency_pT * T1
-        latency_a = load_latency + compute_latency + lif_latency + store_latency
-    return latency_a
+#     return compute_latency
 
 # def calculate_latency_for_conv(tensor, K):
 #     T, C, X, Y = tensor.shape    
@@ -308,26 +184,42 @@ class MLP(nn.Module):
         self.c_output = out_features
 
     def forward(self, x):
-        latency_a = 0
+        MLP_zero_val = [0, 0]
+        MLP_sparsity_delta = [0, 0]
+        MLP_zero_val_nodiff = [0, 0]
+        MLP_sparsity_nodiff = [0, 0]
         T,B,C,H,W = x.shape
-        global total_compute_latency
+        # global total_compute_latency
         x = self.mlp1_lif(x)
-        x_for_ltc = x.flatten(0,1)
-        weight_for_ltc = self.mlp1_conv.weight.squeeze(2).unsqueeze(0).repeat(T,1,1,1)
-        latency_a += calculate_latency_for_mlp_lif_bl(x_for_ltc, weight_for_ltc, 1, 8)
-        total_compute_latency += latency_a
+        MLP_zero_val_nodiff[0] += (x[:, 1, ...] == 0).sum()
+        MLP_sparsity_nodiff[0] = MLP_zero_val_nodiff[0] / (x[:, 1, ...].reshape(-1).shape[0])
+        print("MLP sparsity nodiff 1:", MLP_sparsity_nodiff[0], file=open("sparsity.txt", "a"))
+        x_diff = x[:, 1, ...] - x[:, 0, ...]
+        MLP_zero_val[0] += (x_diff == 0).sum()
+        MLP_sparsity_delta[0] = MLP_zero_val[0] / (x_diff.view(-1).shape[0])
+        print("MLP sparsity delta 1:", MLP_sparsity_delta[0], file=open("sparsity.txt", "a"))
+        # compute_latency = calculate_latency_for_mm(x.flatten(3,4),self.mlp1_conv.out_channels)
+        # total_compute_latency += compute_latency
+        # print('mlp1:', compute_latency, 'total:', total_compute_latency)
+
         x = self.mlp1_conv(x.flatten(0,1))
         x = self.mlp1_bn(x).reshape(T,B,self.c_hidden,H,W).contiguous()
 
         x = self.mlp2_lif(x)
-        x_for_ltc = x.flatten(0,1)
-        weight_for_ltc = self.mlp2_conv.weight.squeeze(2).unsqueeze(0).repeat(T,1,1,1)
-        latency_a += calculate_latency_for_mlp_lif_bl(x_for_ltc, weight_for_ltc, 1, 8)
-        total_compute_latency += latency_a
+        MLP_zero_val_nodiff[1] += (x[:, 1, ...] == 0).sum()
+        MLP_sparsity_nodiff[1] = MLP_zero_val_nodiff[1] / (x[:, 1, ...].reshape(-1).shape[0])
+        print("MLP sparsity nodiff 2:", MLP_sparsity_nodiff[1], file=open("sparsity.txt", "a"))
+        x_diff = x[:, 1, ...] - x[:, 0, ...]
+        MLP_zero_val[1] += (x_diff == 0).sum()
+        MLP_sparsity_delta[1] = MLP_zero_val[1] / (x_diff.view(-1).shape[0])
+        print("MLP sparsity delta 2:", MLP_sparsity_delta[1], file=open("sparsity.txt", "a"))
+        # compute_latency = calculate_latency_for_mm(x.flatten(3,4),self.mlp2_conv.out_channels)
+        # total_compute_latency += compute_latency
+        # print('mlp2:', compute_latency, 'total:', total_compute_latency)
+
         x = self.mlp2_conv(x.flatten(0,1))
         x = self.mlp2_bn(x).reshape(T,B,self.c_output,H,W).contiguous()
 
-        print(f'MLP Latency:{latency_a}')
         return x
 
 
@@ -357,66 +249,102 @@ class SpikingSelfAttention(nn.Module):
 
 
     def forward(self, x):
+        attn_zero_val = [0, 0, 0, 0, 0, 0] # 0 for first lif, 1 for q, 2 for k, 3 for v, 4 for qkv, 5 for delta_mult
+        attn_sparsity_delta = [0, 0, 0, 0, 0, 0]
+        attn_zero_val_nodiff = [0, 0, 0, 0, 0]
+        attn_sparsity_nodiff = [0, 0, 0, 0, 0]
         T,B,C,H,W = x.shape
-        global total_compute_latency
+        # global total_compute_latency
         x = self.proj_lif(x)
-        
+        attn_sparsity_nodiff[0] += (x[:, 1, ...] == 0).sum()
+        attn_sparsity_nodiff[0] = attn_sparsity_nodiff[0] / (x[:, 1, ...].reshape(-1).shape[0])
+        print("Attention sparsity nodiff x:", attn_sparsity_nodiff[0], file=open("sparsity.txt", "a"))
+        x_diff = x[:, 1, ...] - x[:, 0, ...]
+        attn_zero_val[0] += (x_diff == 0).sum()
+        attn_sparsity_delta[0] = attn_zero_val[0] / (x_diff.view(-1).shape[0])
+        print("Attention sparsity delta x:", attn_sparsity_delta[0], file=open("sparsity.txt", "a"))
+
         x = x.flatten(3)
         T, B, C, N = x.shape
         x_for_qkv = x.flatten(0, 1)
-
+        # compute_latency = calculate_latency_for_mm(x_for_qkv.reshape(T,B,C,N),C) * 3 # for q,k,v
+        # total_compute_latency += compute_latency
+        # print('qkv_gen:', compute_latency, 'total:', total_compute_latency)
+        
         q_conv_out = self.q_conv(x_for_qkv)
         q_conv_out = self.q_bn(q_conv_out).reshape(T,B,C,N).contiguous()
         q_conv_out = self.q_lif(q_conv_out)
+        attn_sparsity_nodiff[1] += (q_conv_out[:, 1, ...] == 0).sum()
+        attn_sparsity_nodiff[1] = attn_sparsity_nodiff[1] / (q_conv_out[:, 1, ...].reshape(-1).shape[0])
+        print("Attention sparsity nodiff q:", attn_sparsity_nodiff[1], file=open("sparsity.txt", "a"))
+        q_conv_out_diff = q_conv_out[:, 1, ...] - q_conv_out[:, 0, ...]
+        attn_zero_val[1] += (q_conv_out_diff == 0).sum()
+        attn_sparsity_delta[1] = attn_zero_val[1] / (q_conv_out_diff.view(-1).shape[0])
+        print("Attention sparsity delta q:", attn_sparsity_delta[1], file=open("sparsity.txt", "a"))
         q = q_conv_out.transpose(-1, -2).reshape(T, B, N, self.num_heads, C//self.num_heads).permute(0, 1, 3, 2, 4).contiguous()
 
         k_conv_out = self.k_conv(x_for_qkv)
         k_conv_out = self.k_bn(k_conv_out).reshape(T,B,C,N).contiguous()
         k_conv_out = self.k_lif(k_conv_out)
+        attn_sparsity_nodiff[2] += (k_conv_out[:, 1, ...] == 0).sum()
+        attn_sparsity_nodiff[2] = attn_sparsity_nodiff[2] / (k_conv_out[:, 1, ...].reshape(-1).shape[0])
+        print("Attention sparsity nodiff k:", attn_sparsity_nodiff[2], file=open("sparsity.txt", "a"))
+        k_conv_out_diff = k_conv_out[:, 1, ...] - k_conv_out[:, 0, ...]
+        attn_zero_val[2] += (k_conv_out_diff == 0).sum()
+        attn_sparsity_delta[2] = attn_zero_val[2] / (k_conv_out_diff.view(-1).shape[0])
+        print("Attention sparsity delta k:", attn_sparsity_delta[2], file=open("sparsity.txt", "a"))
         k = k_conv_out.transpose(-1, -2).reshape(T, B, N, self.num_heads, C//self.num_heads).permute(0, 1, 3, 2, 4).contiguous()
 
         v_conv_out = self.v_conv(x_for_qkv)
         v_conv_out = self.v_bn(v_conv_out).reshape(T,B,C,N).contiguous()
         v_conv_out = self.v_lif(v_conv_out)
+        attn_sparsity_nodiff[3] += (v_conv_out[:, 1, ...] == 0).sum()
+        attn_sparsity_nodiff[3] = attn_sparsity_nodiff[3] / (v_conv_out[:, 1, ...].reshape(-1).shape[0])
+        print("Attention sparsity nodiff v:", attn_sparsity_nodiff[3], file=open("sparsity.txt", "a"))
+        v_conv_out_diff = v_conv_out[:, 1, ...] - v_conv_out[:, 0, ...]
+        attn_zero_val[3] += (v_conv_out_diff == 0).sum()
+        attn_sparsity_delta[3] = attn_zero_val[3] / (v_conv_out_diff.view(-1).shape[0])
+        print("Attention sparsity delta v:", attn_sparsity_delta[3], file=open("sparsity.txt", "a"))
         v = v_conv_out.transpose(-1, -2).reshape(T, B, N, self.num_heads, C//self.num_heads).permute(0, 1, 3, 2, 4).contiguous()
 
-        x_for_qkv_ltc = x_for_qkv.unsqueeze(1).transpose(-1,-2)
-        weight_for_ltc = self.q_conv.weight.squeeze(2).unsqueeze(0).repeat(T,1,1,1)
-        latency_qkvgen = calculate_latency_for_qkvgen_lif_bl(x_for_qkv_ltc, weight_for_ltc, 1, 8)
-        total_compute_latency += latency_qkvgen
-        print(f'QKV generation Latency:{latency_qkvgen}')
-        
+        pdb.set_trace()
         x = k.transpose(-2,-1) @ v
-        latency_kvq=0
-        latency_kvq += calculate_latency_for_qkvmm_nonlif_bl(k, v, 1, 1)
+        delta_k = k[:, 1, ...] - k[:, 0, ...]
+        delta_v = v[:, 1, ...] - v[:, 0, ...]
+        delta_kv = delta_k.transpose(-2,-1) @ delta_v
+        k_deltav = k[:, 0, ...].transpose(-2,-1) @ delta_v
+        deltak_v = delta_k.transpose(-2,-1) @ v[:, 0, ...]
+
         # F.cosine_similarity(x[:,1,...].reshape(1,-1),x[:,0,...].reshape(1,-1))  #0.9746
         # F.cosine_similarity(x[:,1,...].reshape(1,-1),(x[:,0,...]+k_deltav).reshape(1,-1))   #0.9828
         # F.cosine_similarity(x[:,1,...].reshape(1,-1),(x[:,0,...]+deltak_v).reshape(1,-1))   #0.9866
         # F.cosine_similarity(x[:,1,...].reshape(1,-1),(x[:,0,...]+k_deltav+deltak_v).reshape(1,-1))  #0.9895
         # F.cosine_similarity(x[:,1,...].reshape(1,-1),(x[:,0,...]+k_deltav+deltak_v+delta_kv).reshape(1,-1)) #1.000
 
+        attn_zero_val[5] += (delta_kv == 0).sum()
+        attn_sparsity_delta[5] = attn_zero_val[5] / (delta_kv.view(-1).shape[0])
+        print("Attention sparsity delta delta_kv:", attn_sparsity_delta[5], file=open("sparsity.txt", "a"))
         x = (q @ x) * self.scale
-        latency_kvq += calculate_latency_for_qkvmm_lif_bl(q, x, 1, 8)
-        total_compute_latency += latency_kvq
-        print(f'Attention Latency:{latency_kvq}')
-        # pdb.set_trace()
+
         # compute_latency = calculate_latency_for_attn(q_conv_out, k_conv_out)
         # total_compute_latency += compute_latency
         # print('attention:', compute_latency, 'total:', total_compute_latency)
 
         x = x.transpose(3, 4).reshape(T, B, C, N).contiguous()
         x = self.attn_lif(x)
-        
+        attn_sparsity_nodiff[4] += (x[:, 1, ...] == 0).sum()
+        attn_sparsity_nodiff[4] = attn_sparsity_nodiff[4] / (x[:, 1, ...].reshape(-1).shape[0])
+        print("Attention sparsity nodiff qkv:", attn_sparsity_nodiff[4], file=open("sparsity.txt", "a"))
+        x_diff = x[:, 1, ...] - x[:, 0, ...]
+        attn_zero_val[4] += (x_diff == 0).sum()
+        attn_sparsity_delta[4] = attn_zero_val[4] / (x_diff.view(-1).shape[0])
+        print("Attention sparsity delta qkv:", attn_sparsity_delta[4], file=open("sparsity.txt", "a"))
+
         # compute_latency = calculate_latency_for_mm(x,C)
         # total_compute_latency += compute_latency
         # print('linear:', compute_latency, 'total:', total_compute_latency)
 
         x = x.flatten(0,1)
-        x_for_ltc = x.unsqueeze(1).transpose(-1,-2)
-        weight_for_ltc = self.proj_conv.weight.squeeze(2).unsqueeze(0).repeat(T,1,1,1)
-        latency_proj = calculate_latency_for_proj_lif_bl(x_for_ltc, weight_for_ltc, 1, 8)
-        total_compute_latency += latency_proj
-        print(f'Projection Latency:{latency_proj}')
         x = self.proj_bn(self.proj_conv(x)).reshape(T,B,C,H,W)
 
         return x, x_for_qkv.reshape(T,B,C,N).contiguous(), q_conv_out, k_conv_out, v_conv_out
@@ -474,12 +402,25 @@ class SpikingTokenizer(nn.Module):
         self.proj4_bn = nn.BatchNorm2d(embed_dims)
 
     def forward(self, x):
+        embed_zero_val = [0, 0, 0, 0]
+        embed_sparsity_delta = [0, 0, 0, 0]
+        embed_zero_val_nodiff = [0, 0, 0, 0]
+        embed_sparsity_nodiff = [0, 0, 0, 0]
         # global total_compute_latency
         T, B, C, H, W = x.shape
+        
         x = self.proj_conv(x.flatten(0, 1))
         x = self.proj_bn(x).reshape(T, B, -1, H, W).contiguous()
 
         x = self.proj1_lif(x).flatten(0,1).contiguous()
+        embed_zero_val_nodiff[0] += (x[4:8] == 0).sum()
+        embed_sparsity_nodiff[0] = embed_zero_val_nodiff[0] / (x[4:8].view(-1).shape[0])
+        print("Tokenizer sparsity nodiff 1:", embed_sparsity_nodiff[0], file=open("sparsity.txt", "a"))
+        x_diff = x[4:8] - x[0:4]
+        # calculate zero pixels in x        
+        embed_zero_val[0] += (x_diff == 0).sum()
+        embed_sparsity_delta[0] = embed_zero_val[0] / (x_diff.view(-1).shape[0])
+        print("Tokenizer sparsity delta 1:", embed_sparsity_delta[0], file=open("sparsity.txt", "a"))
         x = self.maxpool1(x)
         # compute_latency = calculate_latency_for_conv(x,self.proj1_conv.out_channels)
         # total_compute_latency += compute_latency
@@ -488,6 +429,13 @@ class SpikingTokenizer(nn.Module):
         x = self.proj1_bn(x).reshape(T, B, -1, H//2, W//2).contiguous()
         
         x = self.proj2_lif(x).flatten(0, 1).contiguous()
+        embed_zero_val_nodiff[1] += (x[4:8] == 0).sum()
+        embed_sparsity_nodiff[1] = embed_zero_val_nodiff[1] / (x[4:8].view(-1).shape[0])
+        print("Tokenizer sparsity nodiff 2:", embed_sparsity_nodiff[1], file=open("sparsity.txt", "a"))
+        x_diff = x[4:8] - x[0:4]
+        embed_zero_val[1] += (x_diff == 0).sum()
+        embed_sparsity_delta[1] = embed_zero_val[1] / (x_diff.view(-1).shape[0])
+        print("Tokenizer sparsity delta 2:", embed_sparsity_delta[1], file=open("sparsity.txt", "a"))
         x = self.maxpool2(x)
         # compute_latency = calculate_latency_for_conv(x,self.proj2_conv.out_channels)
         # total_compute_latency += compute_latency
@@ -496,6 +444,13 @@ class SpikingTokenizer(nn.Module):
         x = self.proj2_bn(x).reshape(T, B, -1, H//4, W//4).contiguous()
 
         x = self.proj3_lif(x).flatten(0, 1).contiguous()
+        embed_zero_val_nodiff[2] += (x[4:8] == 0).sum()
+        embed_sparsity_nodiff[2] = embed_zero_val_nodiff[2] / (x[4:8].view(-1).shape[0])
+        print("Tokenizer sparsity nodiff 3:", embed_sparsity_nodiff[2], file=open("sparsity.txt", "a"))
+        x_diff = x[4:8] - x[0:4]
+        embed_zero_val[2] += (x_diff == 0).sum()
+        embed_sparsity_delta[2] = embed_zero_val[2] / (x_diff.view(-1).shape[0])
+        print("Tokenizer sparsity delta 3:", embed_sparsity_delta[2], file=open("sparsity.txt", "a"))
         x = self.maxpool3(x)
         # compute_latency = calculate_latency_for_conv(x,self.proj3_conv.out_channels)
         # total_compute_latency += compute_latency
@@ -504,6 +459,13 @@ class SpikingTokenizer(nn.Module):
         x = self.proj3_bn(x).reshape(T, B, -1, H//8, W//8).contiguous()
 
         x = self.proj4_lif(x).flatten(0, 1).contiguous()
+        embed_zero_val_nodiff[3] += (x[4:8] == 0).sum()
+        embed_sparsity_nodiff[3] = embed_zero_val_nodiff[3] / (x[4:8].view(-1).shape[0])
+        print("Tokenizer sparsity nodiff 4:", embed_sparsity_nodiff[3], file=open("sparsity.txt", "a"))
+        x_diff = x[4:8] - x[0:4]
+        embed_zero_val[3] += (x_diff == 0).sum()
+        embed_sparsity_delta[3] = embed_zero_val[3] / (x_diff.view(-1).shape[0])
+        print("Tokenizer sparsity delta 4:", embed_sparsity_delta[3], file=open("sparsity.txt", "a"))
         x = self.maxpool4(x)
         # compute_latency = calculate_latency_for_conv(x,self.proj4_conv.out_channels)
         # total_compute_latency += compute_latency
@@ -591,16 +553,10 @@ class vit_snn(nn.Module):
         return x.flatten(3)
 
     def forward(self, x):
-        latency_proj = 0
         x = (x.unsqueeze(0)).repeat(self.T, 1, 1, 1, 1)
         x = self.forward_features(x)
-        global total_compute_latency    
+        # global total_compute_latency    
         proj_lif = MultiStepLIFNode(tau=2.0, detach_reset=True, backend='torch')
-        x_for_ltc = x.squeeze(1).unsqueeze(3)
-        weight_for_ltc = self.head.weight.unsqueeze(2).repeat(self.T,1,1,1)
-        latency_proj += calculate_latency_for_mlp_bl(x_for_ltc, weight_for_ltc, 1, 8)
-        total_compute_latency += latency_proj
-        print(f'Final MLP Latency:{latency_proj}')
         # total_compute_latency += calculate_latency_for_mm(proj_lif(x),1000)
         # physical_latency = total_compute_latency* (1000/frequency) * 1e-9
 
@@ -616,7 +572,6 @@ class vit_snn(nn.Module):
         # print('ema spike:',ema[0],'ema weight',ema[1],'ema psum',ema[2])
         # print('BASELINE: ema spike:',ema[0],'ema weight',ema[1] * 8,'ema psum',ema[3])
         # x = self.head(x.mean(0))
-        print(f'Overall latency:{total_compute_latency}')
         x = self.head(x.mean(3).mean(0))
         return x
 

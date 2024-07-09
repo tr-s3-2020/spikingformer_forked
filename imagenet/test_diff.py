@@ -588,15 +588,28 @@ def validate(model, load_data, loss_fn, args, amp_autocast=suppress, log_suffix=
     end = time.time()
     last_idx = len(load_data) - 1
     with torch.no_grad():
-        for idx, input in enumerate(load_data):
-            print("INDEX NUMBER:", idx)
+        for idx, (input1, input2) in enumerate(zip(load_data[:-1], load_data[1:])):
+            print("INDEX NUMBER:", idx, file=open('sparsity.txt', 'a'))
             # if not args.prefetcher:
-            input = torch.tensor(input).float().cuda()
+            input1 = torch.tensor(input1).float().cuda()
+            input2 = torch.tensor(input2).float().cuda()
+            input = torch.stack([input1, input2], dim=0)
             # if args.channels_last:
             #     input = input.contiguous(memory_format=torch.channels_last)
-            input = input.unsqueeze(0)
+
             # reshape input to 3 * 256 * 256
             input = input.permute(0,3,1,2)
+            ori_diff = input2 - input1
+            ori_diff_zero_val = 0
+            ori_diff_sparsity = 0
+            ori_diff_zero_val += (ori_diff == 0).sum()
+            ori_diff_sparsity = ori_diff_zero_val / (ori_diff.reshape(-1).shape[0])
+            print("Original image diff sparsity:", ori_diff_sparsity, file=open('sparsity.txt', 'a'))
+            ori_zero_val = 0
+            ori_sparsity = 0
+            ori_zero_val += (input2 == 0).sum()
+            ori_sparsity = ori_zero_val / (input2.reshape(-1).shape[0])
+            print("Original image sparsity:", ori_sparsity, file=open('sparsity.txt', 'a'))
             with amp_autocast():
                 output = model(input)
             # if isinstance(output, (tuple, list)):
