@@ -44,44 +44,44 @@ total_OPS = 0
 #         t = t + 1
 #     return t
 T
-def calculate_latency_for_mm_bsl(a,b): # matrix multiplication latency baseline, calculate A * B
-    , B, D, N = a.shape
-    # print(x.shape, D)
-    Och_num = 256
-    latency_per_pixel = torch.ones(N) #至少需要1个周期来判断非零值, 考虑padding
-    for n in range(N):
-        if (x[:,batch_id,:,n] != 0).sum() != 0:
-            nonzero_ich_idx = x[:,batch_id,:,n].nonzero()[:,1].unique()                        
-            weight_raddr = (nonzero_ich_idx % ich_parallel_num).int()
-            latency_per_pixel[n] = weight_raddr.unique(return_counts = True)[1].max()
+# def calculate_latency_for_mm_bsl(a,b): # matrix multiplication latency baseline, calculate A * B
+#     T, B, D, N = a.shape
+#     # print(x.shape, D)
+#     Och_num = 256
+#     latency_per_pixel = torch.ones(N) #至少需要1个周期来判断非零值, 考虑padding
+#     for n in range(N):
+#         if (x[:,batch_id,:,n] != 0).sum() != 0:
+#             nonzero_ich_idx = x[:,batch_id,:,n].nonzero()[:,1].unique()                        
+#             weight_raddr = (nonzero_ich_idx % ich_parallel_num).int()
+#             latency_per_pixel[n] = weight_raddr.unique(return_counts = True)[1].max()
     
-    # print(latency_per_pixel)
-    compute_latency = np.ceil(D/Och_num) * latency_per_pixel.sum()
-    OPs = N*d*D*2
-    global total_OPS
-    total_OPS += OPs
-    # print('Layer OP:',OPs)
+#     # print(latency_per_pixel)
+#     compute_latency = np.ceil(D/Och_num) * latency_per_pixel.sum()
+#     OPs = N*d*D*2
+#     global total_OPS
+#     total_OPS += OPs
+#     # print('Layer OP:',OPs)
 
-    # compute_latency = np.floor(D/Och_num) * latency_per_pixel.sum()
-    # OPs = N*(d-72)*d*2
-    total_spike = ((x == 1).sum())*D
-    global total_spike_all
-    total_spike_all += total_spike
-    task_energy = ((power * 1e-3) * (compute_latency * (1000/frequency) * 1e-9)) * 1e3
-    pJ_SOP = task_energy / total_spike * 1e9
+#     # compute_latency = np.floor(D/Och_num) * latency_per_pixel.sum()
+#     # OPs = N*(d-72)*d*2
+#     total_spike = ((x == 1).sum())*D
+#     global total_spike_all
+#     total_spike_all += total_spike
+#     task_energy = ((power * 1e-3) * (compute_latency * (1000/frequency) * 1e-9)) * 1e3
+#     pJ_SOP = task_energy / total_spike * 1e9
 
-    efficiency = (OPs / (compute_latency * (1000/frequency) * 1e-9))/1e12  / (power * 1e-3)
-    throughput = (OPs / (compute_latency * (1000/frequency) * 1e-9))/1e12
-    # print('latency:',compute_latency * (1000/frequency),'ns')
-    # print('sparsity:',(x==0).sum() / (x.view(-1).shape[0]))
-    # print('efficiency',efficiency,'throughput',throughput,'pJ/SOP',pJ_SOP)
+#     efficiency = (OPs / (compute_latency * (1000/frequency) * 1e-9))/1e12  / (power * 1e-3)
+#     throughput = (OPs / (compute_latency * (1000/frequency) * 1e-9))/1e12
+#     # print('latency:',compute_latency * (1000/frequency),'ns')
+#     # print('sparsity:',(x==0).sum() / (x.view(-1).shape[0]))
+#     # print('efficiency',efficiency,'throughput',throughput,'pJ/SOP',pJ_SOP)
 
-    global ema
-    ema[0] += (D / 8) * N * d
-    ema[1] += D * d
-    ema[2] += D * n
-    ema[3] += D * n * (d/64) * 2 * 8
-    return compute_latency
+#     global ema
+#     ema[0] += (D / 8) * N * d
+#     ema[1] += D * d
+#     ema[2] += D * n
+#     ema[3] += D * n * (d/64) * 2 * 8
+#     return compute_latency
 
 # def calculate_latency_for_attn_bsl(q,k): # attention latency baseline, calculate q*(k*v)
 #     T, B, D, N = q.shape

@@ -64,7 +64,6 @@ def calculate_latency_for_qkvmm_nonlif_bl(a, b, add_in_width0, add_in_width1): #
         latency_a = load_latency + compute_latency + store_latency
         # print(latency_a)
         latency_a = latency_a * head
-    latency_a = latency_a * B
     return latency_a
 
 def calculate_latency_for_qkvmm_lif_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
@@ -91,7 +90,6 @@ def calculate_latency_for_qkvmm_lif_bl(a, b, add_in_width0, add_in_width1): # ma
         latency_a = load_latency + compute_latency + lif_latency + store_latency
         # print(latency_a)
         latency_a = latency_a * head
-    latency_a = latency_a * B
     return latency_a
 
 def calculate_latency_for_qkvgen_lif_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
@@ -129,7 +127,6 @@ def calculate_latency_for_qkvgen_lif_bl(a, b, add_in_width0, add_in_width1): # m
         store_latency_pT = (H1 * W2) / 32
         store_latency = store_latency_pT * T1
         latency_a = load_latency + compute_latency + lif_latency + store_latency
-    latency_a = latency_a * B1
     return latency_a
 
 def calculate_latency_for_proj_lif_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
@@ -166,19 +163,19 @@ def calculate_latency_for_proj_lif_bl(a, b, add_in_width0, add_in_width1): # mat
         store_latency_pT = (H1 * W2) / 32
         store_latency = store_latency_pT * T1
         latency_a = load_latency + compute_latency + lif_latency + store_latency
-    latency_a = latency_a * B1
     return latency_a
 
-# def calculate_latency_lif_bl(a): # lif latency baseline
-#     T1, B1, C1, H1, W1 = a.shape
-#     bw = 256
-#     latency_a = T1 * B1 * C1 * H1 * W1 / bw
-#     return latency_a
+def calculate_latency_lif_bl(a): # lif latency baseline
+    T1, B1, C1, H1, W1 = a.shape
+    bw = 256
+    latency_a = T1 * B1 * C1 * H1 * W1 / bw
+    return latency_a
 
 def calculate_latency_for_mlp_lif_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
-    T1, B, W1, Hh1, Hw1 = a.shape
-    W2, H2 = b.shape
+    T1, W1, Hh1, Hw1 = a.shape
+    T2, W2, Hh2, Hw2 = b.shape
     H1 = Hh1 * Hw1
+    H2 = Hh2 * Hw2
     # maximum H and W based on PE and on-chip buffer size
     buffer_size = 32 * 1024
     Max_H1 = 256
@@ -210,12 +207,13 @@ def calculate_latency_for_mlp_lif_bl(a, b, add_in_width0, add_in_width1): # matr
         store_latency_pT = (H1 * W2) / 32
         store_latency = store_latency_pT * T1
         latency_a = load_latency + compute_latency + lif_latency + store_latency
-    latency_a = latency_a * B
     return latency_a
 
 def calculate_latency_for_mlp_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
-    T1, B, W1, H1 = a.shape
-    W2, H2 = b.shape
+    T1, W1, Hh1, Hw1 = a.shape
+    T2, W2, Hh2, Hw2 = b.shape
+    H1 = Hh1 * Hw1
+    H2 = Hh2 * Hw2
     # maximum H and W based on PE and on-chip buffer size
     buffer_size = 32 * 1024
     Max_H1 = 256
@@ -243,7 +241,6 @@ def calculate_latency_for_mlp_bl(a, b, add_in_width0, add_in_width1): # matrix m
         store_latency_pT = (H1 * W2 * 16) / 32
         store_latency = store_latency_pT * T1
         latency_a = load_latency + compute_latency + lif_latency + store_latency
-    latency_a = latency_a * B
     return latency_a
 
 # def calculate_latency_for_conv(tensor, K):
@@ -315,17 +312,16 @@ class MLP(nn.Module):
         T,B,C,H,W = x.shape
         global total_compute_latency
         x = self.mlp1_lif(x)
-        x_for_ltc = x
-        # print(self.mlp1_conv.weight.shape) # o,i,h=1,w=1
-        weight_for_ltc = self.mlp1_conv.weight.squeeze()
+        x_for_ltc = x.flatten(0,1)
+        weight_for_ltc = self.mlp1_conv.weight.squeeze(2).unsqueeze(0).repeat(T,1,1,1)
         latency_a += calculate_latency_for_mlp_lif_bl(x_for_ltc, weight_for_ltc, 1, 8)
         total_compute_latency += latency_a
         x = self.mlp1_conv(x.flatten(0,1))
         x = self.mlp1_bn(x).reshape(T,B,self.c_hidden,H,W).contiguous()
 
         x = self.mlp2_lif(x)
-        x_for_ltc = x
-        weight_for_ltc = self.mlp2_conv.weight.squeeze()
+        x_for_ltc = x.flatten(0,1)
+        weight_for_ltc = self.mlp2_conv.weight.squeeze(2).unsqueeze(0).repeat(T,1,1,1)
         latency_a += calculate_latency_for_mlp_lif_bl(x_for_ltc, weight_for_ltc, 1, 8)
         total_compute_latency += latency_a
         x = self.mlp2_conv(x.flatten(0,1))
@@ -600,8 +596,8 @@ class vit_snn(nn.Module):
         x = self.forward_features(x)
         global total_compute_latency    
         proj_lif = MultiStepLIFNode(tau=2.0, detach_reset=True, backend='torch')
-        x_for_ltc = x
-        weight_for_ltc = self.head.weight
+        x_for_ltc = x.squeeze(1).unsqueeze(3)
+        weight_for_ltc = self.head.weight.unsqueeze(2).repeat(self.T,1,1,1)
         latency_proj += calculate_latency_for_mlp_bl(x_for_ltc, weight_for_ltc, 1, 8)
         total_compute_latency += latency_proj
         print(f'Final MLP Latency:{latency_proj}')

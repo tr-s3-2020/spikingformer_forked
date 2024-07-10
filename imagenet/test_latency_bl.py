@@ -24,6 +24,9 @@ from timm.scheduler import create_scheduler
 from timm.utils import ApexScaler, NativeScaler
 import model
 
+import pickle
+import pdb
+
 try:
     from apex import amp
     from apex.parallel import DistributedDataParallel as ApexDDP
@@ -52,13 +55,13 @@ _logger = logging.getLogger('train')
 # The first arg parser parses out only the --config argument, this argument is used to
 # load a yaml file containing key-values that override the defaults for the main parser below
 config_parser = parser = argparse.ArgumentParser(description='Training Config', add_help=False)
-parser.add_argument('-c', '--config', default='cifar10.yml', type=str, metavar='FILE',
+parser.add_argument('-c', '--config', default='imagenet.yml', type=str, metavar='FILE',
                     help='YAML config file specifying default arguments')
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 
 # Model detail
-parser.add_argument('--model', default='CNL-Spikingformer', type=str, metavar='MODEL',
+parser.add_argument('--model', default='vitsnn', type=str, metavar='MODEL',
                     help='Name of model to train (default: "countception"')
 parser.add_argument('-T', '--time-step', type=int, default=4, metavar='time',
                     help='simulation time step of spiking neuron (default: 4)')
@@ -80,9 +83,9 @@ parser.add_argument('--patch-size', type=int, default=None, metavar='N',
 parser.add_argument('--mlp-ratio', type=int, default=None, metavar='N',
                     help='expand ration of embedding dimension in MLP block')
 # Dataset / Model parameters
-parser.add_argument('-data-dir', metavar='DIR', default="/root/dataset/CIFAR10",
+parser.add_argument('-data-dir', metavar='DIR', default='/usr/commondata/local_public/sftp/upload/imagenet/',
                     help='path to dataset')
-parser.add_argument('--dataset', '-d', metavar='NAME', default='cifar10',
+parser.add_argument('--dataset', '-d', metavar='NAME', default='/dataset/ImageNet2012/',
                     help='dataset type (default: ImageFolder/ImageTar if empty)')
 parser.add_argument('--train-split', metavar='NAME', default='train',
                     help='dataset train split (default: train)')
@@ -111,7 +114,7 @@ parser.add_argument('-vb', '--val-batch-size', type=int, default=16, metavar='N'
 
 # Test or resume
 parser.add_argument('--resume',
-                    default='/root/Project/spikingformer_forked/cifar10/models/cifar10.pth.tar',
+                    default='',
                     type=str, metavar='PATH',
                     help='Test model / Resume full model and optimizer state from checkpoint (default: none)')
 parser.add_argument('--no-resume-opt', action='store_true', default=True,
@@ -268,7 +271,7 @@ parser.add_argument('--channels-last', action='store_true', default=False,
                     help='Use channels_last memory layout')
 parser.add_argument('--pin-mem', action='store_true', default=False,
                     help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
-parser.add_argument('--no-prefetcher', action='store_true', default=False,
+parser.add_argument('--no-prefetcher', action='store_true', default=True,
                     help='disable fast prefetcher')
 parser.add_argument('--output', default='', type=str, metavar='PATH',
                     help='path to output folder (default: none, current dir)')
@@ -351,7 +354,6 @@ def main():
                         "Install NVIDA apex or upgrade to PyTorch 1.6")
 
     random_seed(args.seed, args.rank)
-
     model = create_model(
         'Spikingformer',
         pretrained=False,
@@ -362,11 +364,12 @@ def main():
         patch_size=args.patch_size, embed_dims=args.dim, num_heads=args.num_heads, mlp_ratios=args.mlp_ratio,
         in_channels=3, num_classes=args.num_classes, qkv_bias=False,
         depths=args.depths, sr_ratios=1,
+        T=4,
     )
 
-    print("Creating model")
+    # print("Creating model")
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"number of params: {n_parameters}")
+    # print(f"number of params: {n_parameters}")
 
     if args.num_classes is None:
         assert hasattr(model, 'num_classes'), 'Model must have `num_classes` attr if not set on cmd line/config.'
@@ -477,12 +480,12 @@ def main():
         _logger.info('Scheduled epochs: {}'.format(num_epochs))
 
     # create the train and eval datasets
-    dataset_train = create_dataset(
-        args.dataset,
-        root=args.data_dir, split=args.train_split, is_training=True,
-        batch_size=args.batch_size, repeats=args.epoch_repeats)
-    dataset_eval = create_dataset(
-        args.dataset, root=args.data_dir, split=args.val_split, is_training=False, batch_size=args.batch_size)
+    # dataset_train = create_dataset(
+    #     args.dataset,
+    #     root=args.data_dir, split=args.train_split, is_training=True,
+    #     batch_size=args.batch_size, repeats=args.epoch_repeats)
+    # dataset_eval = create_dataset(
+    #     args.dataset, root=args.data_dir, split=args.val_split, is_training=False, batch_size=args.batch_size)
 
     # setup mixup / cutmix
     collate_fn = None
@@ -500,28 +503,28 @@ def main():
             mixup_fn = Mixup(**mixup_args)
 
     # wrap dataset in AugMix helper
-    if num_aug_splits > 1:
-        dataset_train = AugMixDataset(dataset_train, num_splits=num_aug_splits)
+    # if num_aug_splits > 1:
+    #     dataset_train = AugMixDataset(dataset_train, num_splits=num_aug_splits)
 
     # create data loaders w/ augmentation pipeiine
     train_interpolation = args.train_interpolation
     if args.no_aug or not train_interpolation:
         train_interpolation = data_config['interpolation']
 
-    loader_eval = create_loader(
-        dataset_eval,
-        input_size=data_config['input_size'],
-        batch_size=args.val_batch_size,
-        is_training=False,
-        use_prefetcher=args.prefetcher,
-        interpolation=data_config['interpolation'],
-        mean=data_config['mean'],
-        std=data_config['std'],
-        num_workers=args.workers,
-        distributed=args.distributed,
-        crop_pct=data_config['crop_pct'],
-        pin_memory=args.pin_mem,
-    )
+    # loader_eval = create_loader(
+    #     dataset_eval,
+    #     input_size=data_config['input_size'],
+    #     batch_size=args.val_batch_size,
+    #     is_training=False,
+    #     use_prefetcher=args.prefetcher,
+    #     interpolation=data_config['interpolation'],
+    #     mean=data_config['mean'],
+    #     std=data_config['std'],
+    #     num_workers=args.workers,
+    #     distributed=args.distributed,
+    #     crop_pct=data_config['crop_pct'],
+    #     pin_memory=args.pin_mem,
+    # )
 
     # setup loss function
     if args.jsd:
@@ -560,8 +563,11 @@ def main():
             if args.local_rank == 0:
                 _logger.info("Distributing BatchNorm running means and vars")
             distribute_bn(model, args.world_size, args.dist_bn == 'reduce')
-        eval_metrics = validate(model, loader_eval, validate_loss_fn, args, amp_autocast=amp_autocast)
-        print('The test metrics is', eval_metrics)
+        demo_paths_loc = "/root/dataset/adroit-expert-v1.0/pen-v0.pickle"
+        demo_paths = pickle.load(open(demo_paths_loc, "rb"))
+        load_data = demo_paths[0]["images"] # 100 images
+        eval_metrics = validate(model, load_data, validate_loss_fn, args, amp_autocast=amp_autocast)
+        # print('The test metrics is', eval_metrics)
         if model_ema is not None and not args.model_ema_force_cpu:
             if args.distributed and args.dist_bn in ('broadcast', 'reduce'):
                 distribute_bn(model_ema, args.world_size, args.dist_bn == 'reduce')
@@ -569,67 +575,47 @@ def main():
         pass
 
 
-def validate(model, loader, loss_fn, args, amp_autocast=suppress, log_suffix=''):
+def validate(model, load_data, loss_fn, args, amp_autocast=suppress, log_suffix=''):
     batch_time_m = AverageMeter()
     losses_m = AverageMeter()
     top1_m = AverageMeter()
     top5_m = AverageMeter()
 
     model.eval()
+    # print model to model.log
+    print(model, file=open('model.log', 'w'))
 
     end = time.time()
-    last_idx = len(loader) - 1
+    last_idx = len(load_data) - 1
     with torch.no_grad():
-        for batch_idx, (input, target) in enumerate(loader):
-            last_batch = batch_idx == last_idx
-            if not args.prefetcher:
-                input = input.cuda()
-                target = target.cuda()
-            if args.channels_last:
-                input = input.contiguous(memory_format=torch.channels_last)
-
+        for idx, input in enumerate(load_data):
+            print("INDEX NUMBER:", idx)
+            # if not args.prefetcher:
+            input = torch.tensor(input).float().cuda()
+            # if args.channels_last:
+            #     input = input.contiguous(memory_format=torch.channels_last)
+            input = input.unsqueeze(0)
+            # reshape input to 3 * 256 * 256
+            input = input.permute(0,3,1,2)
             with amp_autocast():
                 output = model(input)
-            if isinstance(output, (tuple, list)):
-                output = output[0]
+            # if isinstance(output, (tuple, list)):
+            #     output = output[0]
 
+            # print(output)
             # augmentation reduction
-            reduce_factor = args.tta
-            if reduce_factor > 1:
-                output = output.unfold(0, reduce_factor, reduce_factor).mean(dim=2)
-                target = target[0:target.size(0):reduce_factor]
+            # reduce_factor = args.tta
+            # if reduce_factor > 1:
+            #     output = output.unfold(0, reduce_factor, reduce_factor).mean(dim=2)
 
-            loss = loss_fn(output, target)
             functional.reset_net(model)
-
-            acc1, acc5 = accuracy(output, target, topk=(1, 5))
-
-            if args.distributed:
-                reduced_loss = reduce_tensor(loss.data, args.world_size)
-                acc1 = reduce_tensor(acc1, args.world_size)
-                acc5 = reduce_tensor(acc5, args.world_size)
-            else:
-                reduced_loss = loss.data
 
             torch.cuda.synchronize()
 
-            losses_m.update(reduced_loss.item(), input.size(0))
-            top1_m.update(acc1.item(), output.size(0))
-            top5_m.update(acc5.item(), output.size(0))
-
-            batch_time_m.update(time.time() - end)
-            end = time.time()
-            if args.local_rank == 0 and (last_batch or batch_idx % args.log_interval == 0):
-                log_name = 'Test' + log_suffix
-                _logger.info(
-                    '{0}: [{1:>4d}/{2}]  '
-                    'Time: {batch_time.val:.3f} ({batch_time.avg:.3f})  '
-                    'Loss: {loss.val:>7.4f} ({loss.avg:>6.4f})  '
-                    'Acc@1: {top1.val:>7.4f} ({top1.avg:>7.4f})  '
-                    'Acc@5: {top5.val:>7.4f} ({top5.avg:>7.4f})'.format(
-                        log_name, batch_idx, last_idx, batch_time=batch_time_m,
-                        loss=losses_m, top1=top1_m, top5=top5_m))
-
+            # batch_time_m.update(time.time() - end)
+            # end = time.time()
+            break
+        
     metrics = OrderedDict([('loss', losses_m.avg), ('top1', top1_m.avg), ('top5', top5_m.avg)])
 
     return metrics
