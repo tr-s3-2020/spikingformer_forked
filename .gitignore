@@ -1,1 +1,2 @@
-./imagenet/output
+imagenet/output/*
+models/*
