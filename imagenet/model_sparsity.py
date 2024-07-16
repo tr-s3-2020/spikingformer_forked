@@ -43,7 +43,7 @@ total_OPS = 0
 #             break
 #         t = t + 1
 #     return t
-T
+
 # def calculate_latency_for_mm_bsl(a,b): # matrix multiplication latency baseline, calculate A * B
 #     T, B, D, N = a.shape
 #     # print(x.shape, D)

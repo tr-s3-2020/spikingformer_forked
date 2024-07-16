@@ -17,32 +17,11 @@ power = 2.84 # mW
 frequency = 50 #MHz
 batch_id = 0
 total_compute_latency = 0
+total_compute_latency_delta = 0
 ich_parallel_num = 8
 ema = torch.zeros(4,1)
 total_spike_all = 0
 total_OPS = 0
-# def calculate_total_cycles(task_collapse_times):
-#     task_collapse_times_copy = copy.deepcopy(task_collapse_times)
-#     core_number = len(task_collapse_times)
-#     task_number = len(task_collapse_times[0])
-#     task_id_per_core = [0] * core_number
-#     # print(f'T0: {task_id_per_core}')    
-#     t = 0
-#     while True:
-#         min_task_id = min(task_id_per_core)
-#         for i in range(core_number):
-#             if task_id_per_core[i] - min_task_id > 1 or task_id_per_core[i] == task_number:
-#                 continue
-#             task_collapse_times_copy[i][task_id_per_core[i]] -= 1
-#             if task_collapse_times_copy[i][task_id_per_core[i]] == 0:
-#                 task_id_per_core[i] += 1
-#         # print(f'T{t}: {task_id_per_core}')    
-#         # print(task_collapse_times_copy)
-
-#         if task_id_per_core == core_number * [task_number]:
-#             break
-#         t = t + 1
-#     return t
 
 def calculate_latency_for_qkvmm_nonlif_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
     T, B, head, H, W = a.shape
@@ -134,7 +113,7 @@ def calculate_latency_for_qkvgen_lif_bl(a, b, add_in_width0, add_in_width1): # m
 
 def calculate_latency_for_proj_lif_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
     T1, B1, H1, W1 = a.shape
-    T2, B2, H2, W2 = b.shape
+    H2, W2 = b.shape
     # maximum H and W based on PE and on-chip buffer size
     buffer_size = 32 * 1024
     Max_H1 = 256
@@ -169,11 +148,130 @@ def calculate_latency_for_proj_lif_bl(a, b, add_in_width0, add_in_width1): # mat
     latency_a = latency_a * B1
     return latency_a
 
-# def calculate_latency_lif_bl(a): # lif latency baseline
-#     T1, B1, C1, H1, W1 = a.shape
-#     bw = 256
-#     latency_a = T1 * B1 * C1 * H1 * W1 / bw
-#     return latency_a
+def calculate_latency_for_proj_lif_delta_i(a, b, add_in_width1, SCF): # input, load and compute, SCF: sparse compress format
+    bank_num = 16
+    T, H1, W1 = a.shape # batch size should be 1
+    H2, W2 = b.shape
+    # maximum H and W based on PE and on-chip buffer size
+    buffer_size = 32 * 1024
+    Max_H1 = 256
+    Max_W2 = 256
+    # calculate the overall memory consumption
+    # find the maximum length of nonzero value in each timestep in a_Hreshape
+    all_nonzero_idx = a.nonzero()
+    # group by timestep
+    all_nonzero_idx_t = [[] for i in range(T)]
+    for each in all_nonzero_idx.tolist():
+        all_nonzero_idx_t[each[0]].append([each[1], each[2]])
+    max_len_a_Hreshape_t = max([len(each) for each in all_nonzero_idx_t])
+    act_volume_for_mem_cons = 0
+    # sparse encoding: depend on SCF
+    if SCF == 'COO':
+        bw = 16
+        coo_x_bw = bw
+        coo_y_bw = bw
+        act_volume_for_mem_cons = (coo_x_bw + coo_y_bw) * max_len_a_Hreshape_t
+    elif SCF == 'CSR':
+        bw = 16
+        csr_row_ptr_vol = (H1 + 1) * bw
+        csr_col_idx_vol = max_len_a_Hreshape_t * bw
+        act_volume_for_mem_cons = csr_row_ptr_vol + csr_col_idx_vol
+    elif SCF == 'AdaptiveCSR':
+        acsr_row_ptr_vol = (H1 + 1) * np.ceil(np.log2(max_len_a_Hreshape_t))
+        acsr_col_idx_vol = np.ceil(np.log2(W1)) * max_len_a_Hreshape_t
+        act_volume_for_mem_cons = acsr_row_ptr_vol + acsr_col_idx_vol
+    mem_cons_full_T = (act_volume_for_mem_cons + add_in_width1 * len(torch.unique(all_nonzero_idx[:,2])) * 16) / 8
+    # print(mem_cons_full_T)
+    load_latency = 0
+    compute_latency_pT = 0
+    compute_latency = 0
+    lif_latency_pT = 0
+    lif_latency = 0
+    latency_per_token = torch.zeros(H1)
+    if (H1 <= Max_H1) or (W2 <= Max_W2):
+        if mem_cons_full_T <= buffer_size:
+            # calculate latency
+            for t in range(T):
+                act_volume = 0
+                # sparse encoding: depend on SCF
+                if SCF == 'COO':
+                    bw = 16
+                    coo_x_bw = bw
+                    coo_y_bw = bw
+                    act_volume = (coo_x_bw + coo_y_bw) * len(all_nonzero_idx_t[t])
+                elif SCF == 'CSR':
+                    bw = 16
+                    csr_row_ptr_vol = (H1 + 1) * bw
+                    csr_col_idx_vol = len(all_nonzero_idx_t[t]) * bw
+                    act_volume = csr_row_ptr_vol + csr_col_idx_vol
+                elif SCF == 'AdaptiveCSR':
+                    acsr_row_ptr_vol = (H1 + 1) * np.ceil(np.log2(len(all_nonzero_idx_t[t])))
+                    acsr_col_idx_vol = np.ceil(np.log2(W1)) * len(all_nonzero_idx_t[t])
+                    act_volume = acsr_row_ptr_vol + acsr_col_idx_vol
+                load_latency += (act_volume + add_in_width1 * len(torch.unique(all_nonzero_idx[:,2])) * 16) / 8 / 32 # overall bits / bandwidth
+                for h in range(H1):
+                    if (a[t, h, :] != 0).sum() != 0: # if the h-th token has non-zero value
+                        nonzero_ich_idx = a[t, h, :].nonzero()[:,0]
+                        weight_raddr = (nonzero_ich_idx % bank_num).int()
+                        latency_per_token[h] = (1 + 1 + 4) * weight_raddr.unique(return_counts=True)[1].max().item()
+                compute_latency_pT = latency_per_token.sum() * np.ceil(W2/256)
+                compute_latency += compute_latency_pT
+            lif_latency_pT= H1 * np.ceil(W2/256)
+            lif_latency = lif_latency_pT * T
+            latency_l_c = load_latency + compute_latency + lif_latency
+        else: # activation first
+            # calculate latency
+            for t in range(T):
+                act_volume = 0
+                # sparse encoding: depend on SCF
+                if SCF == 'COO':
+                    bw = 16
+                    coo_x_bw = bw
+                    coo_y_bw = bw
+                    act_volume = (coo_x_bw + coo_y_bw) * len(all_nonzero_idx_t[t])
+                elif SCF == 'CSR':
+                    bw = 16
+                    csr_row_ptr_vol = (H1 + 1) * bw
+                    csr_col_idx_vol = len(all_nonzero_idx_t[t]) * bw
+                    act_volume = csr_row_ptr_vol + csr_col_idx_vol
+                elif SCF == 'AdaptiveCSR':
+                    acsr_row_ptr_vol = (H1 + 1) * np.ceil(np.log2(len(all_nonzero_idx_t[t])))
+                    acsr_col_idx_vol = np.ceil(np.log2(W1)) * len(all_nonzero_idx_t[t])
+                    act_volume = acsr_row_ptr_vol + acsr_col_idx_vol
+                load_latency += (act_volume * np.ceil(mem_cons_full_T / buffer_size) + add_in_width1 * len(torch.unique(all_nonzero_idx[:,1])) * 16) / 8 / 32 # overall bits / bandwidth
+                for h in range(H1):
+                    if (a[t, h, :] != 0).sum() != 0: # if the h-th token has non-zero value
+                        nonzero_ich_idx = a[t, h, :].nonzero()[:,0]
+                        weight_raddr = (nonzero_ich_idx % bank_num).int()
+                        latency_per_token[h] = (1 + 1 + 4) * weight_raddr.unique(return_counts=True)[1].max().item()
+                compute_latency_pT = latency_per_token.sum() * np.ceil(W2/256)
+                compute_latency += compute_latency_pT
+            lif_latency_pT= H1 * np.ceil(W2/256)
+            lif_latency = lif_latency_pT * T
+            latency_l_c = load_latency + compute_latency + lif_latency
+    return latency_l_c
+
+def calculate_latency_for_proj_lif_delta_o(a, SCF):
+    T, H1, W1 = a.shape # batch size should be 1
+    all_nonzero_idx = a.nonzero()
+    act_volume = 0
+    # sparse encoding: depend on SCF
+    if SCF == 'COO':
+        bw = 16
+        coo_x_bw = bw
+        coo_y_bw = bw
+        act_volume = (coo_x_bw + coo_y_bw) * len(all_nonzero_idx)
+    elif SCF == 'CSR':
+        bw = 16
+        csr_row_ptr_vol = (H1 + 1) * bw
+        csr_col_idx_vol = len(all_nonzero_idx) * bw
+        act_volume = csr_row_ptr_vol + csr_col_idx_vol
+    elif SCF == 'AdaptiveCSR':
+        acsr_row_ptr_vol = (H1 + 1) * np.ceil(np.log2(len(all_nonzero_idx)))
+        acsr_col_idx_vol = np.ceil(np.log2(W1)) * len(all_nonzero_idx)
+        act_volume = acsr_row_ptr_vol + acsr_col_idx_vol
+    latency_s = (act_volume) / 8 / 32
+    return latency_s
 
 def calculate_latency_for_mlp_lif_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
     T1, B, W1, Hh1, Hw1 = a.shape
@@ -213,6 +311,135 @@ def calculate_latency_for_mlp_lif_bl(a, b, add_in_width0, add_in_width1): # matr
     latency_a = latency_a * B
     return latency_a
 
+def calculate_latency_for_mlp_lif_delta_i(a, b, add_in_width1, SCF): # input, load and compute, SCF: sparse compress format
+    bank_num = 16
+    T, W1, Hh1, Hw1 = a.shape # batch size should be 1
+    W2, H2 = b.shape
+    a_Hreshape = a.reshape(T, W1, -1)
+    T, W1, H1 = a_Hreshape.shape
+    # maximum H and W based on PE and on-chip buffer size
+    buffer_size = 32 * 1024
+    Max_H1 = 256
+    Max_W2 = 256
+    # calculate the overall memory consumption
+    # find the maximum length of nonzero value in each timestep in a_Hreshape
+    all_nonzero_idx = a_Hreshape.nonzero()
+    # group by timestep
+    all_nonzero_idx_t = [[] for i in range(T)]
+    for each in all_nonzero_idx.tolist():
+        all_nonzero_idx_t[each[0]].append([each[1], each[2]])
+    max_len_a_Hreshape_t = max([len(each) for each in all_nonzero_idx_t])
+    act_volume_for_mem_cons = 0
+    # sparse encoding: depend on SCF
+    if SCF == 'COO':
+        bw = 16
+        coo_x_bw = bw
+        coo_y_bw = bw
+        act_volume_for_mem_cons = (coo_x_bw + coo_y_bw) * max_len_a_Hreshape_t
+    elif SCF == 'CSR':
+        bw = 16
+        csr_row_ptr_vol = (H1 + 1) * bw
+        csr_col_idx_vol = max_len_a_Hreshape_t * bw
+        act_volume_for_mem_cons = csr_row_ptr_vol + csr_col_idx_vol
+    elif SCF == 'AdaptiveCSR':
+        acsr_row_ptr_vol = (H1 + 1) * np.ceil(np.log2(max_len_a_Hreshape_t))
+        acsr_col_idx_vol = np.ceil(np.log2(W1)) * max_len_a_Hreshape_t
+        act_volume_for_mem_cons = acsr_row_ptr_vol + acsr_col_idx_vol
+    mem_cons_full_T = (act_volume_for_mem_cons + add_in_width1 * len(torch.unique(all_nonzero_idx[:,1])) * 16) / 8
+    # print(mem_cons_full_T)
+    load_latency = 0
+    compute_latency_pT = 0
+    compute_latency = 0
+    lif_latency_pT = 0
+    lif_latency = 0
+    latency_per_token = torch.zeros(H1)
+    if (H1 <= Max_H1) or (W2 <= Max_W2):
+        if mem_cons_full_T <= buffer_size:
+            # calculate latency
+            for t in range(T):
+                act_volume = 0
+                # sparse encoding: depend on SCF
+                if SCF == 'COO':
+                    bw = 16
+                    coo_x_bw = bw
+                    coo_y_bw = bw
+                    act_volume = (coo_x_bw + coo_y_bw) * len(all_nonzero_idx_t[t])
+                elif SCF == 'CSR':
+                    bw = 16
+                    csr_row_ptr_vol = (H1 + 1) * bw
+                    csr_col_idx_vol = len(all_nonzero_idx_t[t]) * bw
+                    act_volume = csr_row_ptr_vol + csr_col_idx_vol
+                elif SCF == 'AdaptiveCSR':
+                    acsr_row_ptr_vol = (H1 + 1) * np.ceil(np.log2(len(all_nonzero_idx_t[t])))
+                    acsr_col_idx_vol = np.ceil(np.log2(W1)) * len(all_nonzero_idx_t[t])
+                    act_volume = acsr_row_ptr_vol + acsr_col_idx_vol
+                load_latency += (act_volume + add_in_width1 * len(torch.unique(all_nonzero_idx[:,1])) * 16) / 8 / 32 # overall bits / bandwidth
+                for h in range(H1):
+                    if (a_Hreshape[t, :, h] != 0).sum() != 0: # if the h-th token has non-zero value
+                        nonzero_ich_idx = a_Hreshape[t, :, h].nonzero()[:,0]
+                        weight_raddr = (nonzero_ich_idx % bank_num).int()
+                        latency_per_token[h] = (1 + 1 + 4) * weight_raddr.unique(return_counts=True)[1].max().item()
+                compute_latency_pT = latency_per_token.sum() * np.ceil(W2/256)
+                compute_latency += compute_latency_pT
+            lif_latency_pT= H1 * np.ceil(W2/256)
+            lif_latency = lif_latency_pT * T
+            latency_l_c = load_latency + compute_latency + lif_latency
+        else: # activation first
+            # calculate latency
+            for t in range(T):
+                act_volume = 0
+                # sparse encoding: depend on SCF
+                if SCF == 'COO':
+                    bw = 16
+                    coo_x_bw = bw
+                    coo_y_bw = bw
+                    act_volume = (coo_x_bw + coo_y_bw) * len(all_nonzero_idx_t[t])
+                elif SCF == 'CSR':
+                    bw = 16
+                    csr_row_ptr_vol = (H1 + 1) * bw
+                    csr_col_idx_vol = len(all_nonzero_idx_t[t]) * bw
+                    act_volume = csr_row_ptr_vol + csr_col_idx_vol
+                elif SCF == 'AdaptiveCSR':
+                    acsr_row_ptr_vol = (H1 + 1) * np.ceil(np.log2(len(all_nonzero_idx_t[t])))
+                    acsr_col_idx_vol = np.ceil(np.log2(W1)) * len(all_nonzero_idx_t[t])
+                    act_volume = acsr_row_ptr_vol + acsr_col_idx_vol
+                load_latency += (act_volume * np.ceil(mem_cons_full_T / buffer_size) + add_in_width1 * len(torch.unique(all_nonzero_idx[:,1])) * 16) / 8 / 32 # overall bits / bandwidth
+                for h in range(H1):
+                    if (a_Hreshape[t, :, h] != 0).sum() != 0: # if the h-th token has non-zero value
+                        nonzero_ich_idx = a_Hreshape[t, :, h].nonzero()[:,0]
+                        weight_raddr = (nonzero_ich_idx % bank_num).int()
+                        latency_per_token[h] = (1 + 1 + 4) * weight_raddr.unique(return_counts=True)[1].max().item()
+                compute_latency_pT = latency_per_token.sum() * np.ceil(W2/256)
+                compute_latency += compute_latency_pT
+            lif_latency_pT= H1 * np.ceil(W2/256)
+            lif_latency = lif_latency_pT * T
+            latency_l_c = load_latency + compute_latency + lif_latency
+    return latency_l_c
+
+def calculate_latency_for_mlp_lif_delta_o(a, SCF):
+    T, W1, Hh1, Hw1 = a.shape # batch size should be 1
+    a_Hreshape = a.reshape(T, W1, -1)
+    T, W1, H1 = a_Hreshape.shape
+    all_nonzero_idx = a_Hreshape.nonzero()
+    act_volume = 0
+    # sparse encoding: depend on SCF
+    if SCF == 'COO':
+        bw = 16
+        coo_x_bw = bw
+        coo_y_bw = bw
+        act_volume = (coo_x_bw + coo_y_bw) * len(all_nonzero_idx)
+    elif SCF == 'CSR':
+        bw = 16
+        csr_row_ptr_vol = (H1 + 1) * bw
+        csr_col_idx_vol = len(all_nonzero_idx) * bw
+        act_volume = csr_row_ptr_vol + csr_col_idx_vol
+    elif SCF == 'AdaptiveCSR':
+        acsr_row_ptr_vol = (H1 + 1) * np.ceil(np.log2(len(all_nonzero_idx)))
+        acsr_col_idx_vol = np.ceil(np.log2(W1)) * len(all_nonzero_idx)
+        act_volume = acsr_row_ptr_vol + acsr_col_idx_vol
+    latency_s = (act_volume) / 8 / 32
+    return latency_s
+
 def calculate_latency_for_mlp_bl(a, b, add_in_width0, add_in_width1): # matrix multiplication latency baseline, calculate a * b. add_in_width is the addition input width of adder tree.
     T1, B, W1, H1 = a.shape
     W2, H2 = b.shape
@@ -246,54 +473,128 @@ def calculate_latency_for_mlp_bl(a, b, add_in_width0, add_in_width1): # matrix m
     latency_a = latency_a * B
     return latency_a
 
-# def calculate_latency_for_conv(tensor, K):
-#     T, C, X, Y = tensor.shape    
-#     Och_num = 8
-#     latency_per_pixel = torch.ones([X+2,Y+2]) #至少需要1个周期来判断非零值, 考虑padding
-#     # print((tensor==0).sum() / (tensor.view(-1).shape[0]))
-#     for x in range(X):
-#         for y in range(Y):
-#             if (tensor[:,:,x,y] != 0).sum() != 0:
-#                 nonzero_ich_idx = tensor[:,:,x,y].nonzero()[:,1].unique()                        
-#                 weight_raddr = (nonzero_ich_idx % ich_parallel_num).int()
-#                 latency_per_pixel[x+1,y+1] = weight_raddr.unique(return_counts = True)[1].max()
-    
-#     latency_per_core = torch.zeros(9,X*Y)
-#     for core_id in range(9):
-#         line_start = int(core_id/3)
-#         line_end = X + line_start
-#         col_start = core_id % 3
-#         col_end = Y + col_start
-#         latency_per_core[core_id] = latency_per_pixel[line_start:line_end, col_start:col_end].reshape(-1)
+def calculate_latency_for_mlp_delta_i(a, b, add_in_width1, SCF): # input, load and compute
+    bank_num = 16
+    T, W1, Hh1, Hw1 = a.shape # batch size should be 1
+    W2, H2 = b.shape
+    a_Hreshape = a.reshape(T, W1, -1)
+    T, W1, H1 = a_Hreshape.shape
+    # maximum H and W based on PE and on-chip buffer size
+    buffer_size = 32 * 1024
+    Max_H1 = 256
+    Max_W2 = 256
+    # calculate the overall memory consumption
+    # find the maximum length of nonzero value in each timestep in a_Hreshape
+    all_nonzero_idx = a_Hreshape.nonzero()
+    # group by timestep
+    all_nonzero_idx_t = [[] for i in range(T)]
+    for each in all_nonzero_idx.tolist():
+        all_nonzero_idx_t[each[0]].append([each[1], each[2]])
+    max_len_a_Hreshape_t = max([len(each) for each in all_nonzero_idx_t])
+    act_volume_for_mem_cons = 0
+    # sparse encoding: depend on SCF
+    if SCF == 'COO':
+        bw = 16
+        coo_x_bw = bw
+        coo_y_bw = bw
+        act_volume_for_mem_cons = (coo_x_bw + coo_y_bw) * max_len_a_Hreshape_t
+    elif SCF == 'CSR':
+        bw = 16
+        csr_row_ptr_vol = (H1 + 1) * bw
+        csr_col_idx_vol = max_len_a_Hreshape_t * bw
+        act_volume_for_mem_cons = csr_row_ptr_vol + csr_col_idx_vol
+    elif SCF == 'AdaptiveCSR':
+        acsr_row_ptr_vol = (H1 + 1) * np.ceil(np.log2(max_len_a_Hreshape_t))
+        acsr_col_idx_vol = np.ceil(np.log2(W1)) * max_len_a_Hreshape_t
+        act_volume_for_mem_cons = acsr_row_ptr_vol + acsr_col_idx_vol
+    mem_cons_full_T = (act_volume_for_mem_cons + add_in_width1 * len(torch.unique(all_nonzero_idx[:,1])) * 16) / 8
+    # print(mem_cons_full_T)
+    load_latency = 0
+    compute_latency_pT = 0
+    compute_latency = 0
+    latency_per_token = torch.zeros(H1)
+    if (H1 <= Max_H1) or (W2 <= Max_W2):
+        if mem_cons_full_T <= buffer_size:
+            # calculate latency
+            for t in range(T):
+                act_volume = 0
+                # sparse encoding: depend on SCF
+                if SCF == 'COO':
+                    bw = 16
+                    coo_x_bw = bw
+                    coo_y_bw = bw
+                    act_volume = (coo_x_bw + coo_y_bw) * len(all_nonzero_idx_t[t])
+                elif SCF == 'CSR':
+                    bw = 16
+                    csr_row_ptr_vol = (H1 + 1) * bw
+                    csr_col_idx_vol = len(all_nonzero_idx_t[t]) * bw
+                    act_volume = csr_row_ptr_vol + csr_col_idx_vol
+                elif SCF == 'AdaptiveCSR':
+                    acsr_row_ptr_vol = (H1 + 1) * np.ceil(np.log2(len(all_nonzero_idx_t[t])))
+                    acsr_col_idx_vol = np.ceil(np.log2(W1)) * len(all_nonzero_idx_t[t])
+                    act_volume = acsr_row_ptr_vol + acsr_col_idx_vol
+                load_latency += (act_volume + add_in_width1 * len(torch.unique(all_nonzero_idx[:,1])) * 16) / 8 / 32 # overall bits / bandwidth
+                for h in range(H1):
+                    if (a_Hreshape[t, :, h] != 0).sum() != 0: # if the h-th token has non-zero value
+                        nonzero_ich_idx = a_Hreshape[t, :, h].nonzero()[:,0]
+                        weight_raddr = (nonzero_ich_idx % bank_num).int()
+                        latency_per_token[h] = (1 + 1 + 4) * weight_raddr.unique(return_counts=True)[1].max().item()
+                compute_latency_pT = latency_per_token.sum() * np.ceil(W2/256)
+                compute_latency += compute_latency_pT
+            latency_l_c = load_latency + compute_latency
+        else: # activation first
+            # calculate latency
+            for t in range(T):
+                act_volume = 0
+                # sparse encoding: depend on SCF
+                if SCF == 'COO':
+                    bw = 16
+                    coo_x_bw = bw
+                    coo_y_bw = bw
+                    act_volume = (coo_x_bw + coo_y_bw) * len(all_nonzero_idx_t[t])
+                elif SCF == 'CSR':
+                    bw = 16
+                    csr_row_ptr_vol = (H1 + 1) * bw
+                    csr_col_idx_vol = len(all_nonzero_idx_t[t]) * bw
+                    act_volume = csr_row_ptr_vol + csr_col_idx_vol
+                elif SCF == 'AdaptiveCSR':
+                    acsr_row_ptr_vol = (H1 + 1) * np.ceil(np.log2(len(all_nonzero_idx_t[t])))
+                    acsr_col_idx_vol = np.ceil(np.log2(W1)) * len(all_nonzero_idx_t[t])
+                    act_volume = acsr_row_ptr_vol + acsr_col_idx_vol
+                load_latency += (act_volume * np.ceil(mem_cons_full_T / buffer_size) + add_in_width1 * len(torch.unique(all_nonzero_idx[:,1])) * 16) / 8 / 32 # overall bits / bandwidth
+                for h in range(H1):
+                    if (a_Hreshape[t, :, h] != 0).sum() != 0: # if the h-th token has non-zero value
+                        nonzero_ich_idx = a_Hreshape[t, :, h].nonzero()[:,0]
+                        weight_raddr = (nonzero_ich_idx % bank_num).int()
+                        latency_per_token[h] = (1 + 1 + 4) * weight_raddr.unique(return_counts=True)[1].max().item()
+                compute_latency_pT = latency_per_token.sum() * np.ceil(W2/256)
+                compute_latency += compute_latency_pT
+            latency_l_c = load_latency + compute_latency
+    return latency_l_c
 
-#     compute_latency = (K/Och_num) * calculate_total_cycles(latency_per_core)
-    
-#     OPs = X*Y*C*K*9*2
-#     global total_OPS
-#     total_OPS += OPs
-#     # print('Layer OP:',OPs)
-
-
-#     efficiency = (OPs / (compute_latency * (1000/frequency) * 1e-9))/1e12 / (power * 1e-3)
-#     throughput = (OPs / (compute_latency * (1000/frequency) * 1e-9))/1e12
-
-#     total_spike = ((tensor == 1).sum())*9*K
-#     global total_spike_all
-#     total_spike_all += total_spike
-
-#     task_energy = ((power * 1e-3) * (compute_latency * (1000/frequency) * 1e-9)) * 1e3
-#     pJ_SOP = task_energy / total_spike * 1e9
-#     # print('efficiency',efficiency,'throughput',throughput,'pJ/SOP',pJ_SOP)
-#     # print('latency:',compute_latency * (1000/frequency),'ns')
-
-#     global ema
-#     ema[0] += (K / 8) * X * Y * C
-#     ema[1] += C * K * 9
-#     ema[2] += K * X * Y
-#     ema[3] += K * X * Y * 2 * 8 * (C/64)
-#     return compute_latency
-#     # load_data_layer_latency = C * (K/Och_num) #+ (C / ich_parallel_num) * X * Y # Load Weight and Load Spike
-    
+def calculate_latency_for_mlp_delta_o(a, SCF):
+    T, W1, Hh1, Hw1 = a.shape # batch size should be 1
+    a_Hreshape = a.reshape(T, W1, -1)
+    T, W1, H1 = a_Hreshape.shape
+    all_nonzero_idx = a_Hreshape.nonzero()
+    act_volume = 0
+    # sparse encoding: depend on SCF
+    if SCF == 'COO':
+        bw = 16
+        coo_x_bw = bw
+        coo_y_bw = bw
+        act_volume = (coo_x_bw + coo_y_bw) * len(all_nonzero_idx)
+    elif SCF == 'CSR':
+        bw = 16
+        csr_row_ptr_vol = (H1 + 1) * bw
+        csr_col_idx_vol = len(all_nonzero_idx) * bw
+        act_volume = csr_row_ptr_vol + csr_col_idx_vol
+    elif SCF == 'AdaptiveCSR':
+        acsr_row_ptr_vol = (H1 + 1) * np.ceil(np.log2(len(all_nonzero_idx)))
+        acsr_col_idx_vol = np.ceil(np.log2(W1)) * len(all_nonzero_idx)
+        act_volume = acsr_row_ptr_vol + acsr_col_idx_vol
+    latency_s = act_volume / 8 / 32
+    return latency_s
 class MLP(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, drop=0.):
         super().__init__()
@@ -312,26 +613,61 @@ class MLP(nn.Module):
 
     def forward(self, x):
         latency_a = 0
+        latency_delta = 0
+        latency_delta_csr = 0
+        latency_delta_acsr = 0
         T,B,C,H,W = x.shape
         global total_compute_latency
+        global total_compute_latency_delta
         x = self.mlp1_lif(x)
         x_for_ltc = x
+        delta_x = x_for_ltc[:,1,...] - x_for_ltc[:,0,...]
         # print(self.mlp1_conv.weight.shape) # o,i,h=1,w=1
         weight_for_ltc = self.mlp1_conv.weight.squeeze()
         latency_a += calculate_latency_for_mlp_lif_bl(x_for_ltc, weight_for_ltc, 1, 8)
+        latency_delta += calculate_latency_for_mlp_lif_delta_i(delta_x, weight_for_ltc, 8, 'COO')
+        latency_delta_csr += calculate_latency_for_mlp_lif_delta_i(delta_x, weight_for_ltc, 8, 'CSR')
+        latency_delta_acsr += calculate_latency_for_mlp_lif_delta_i(delta_x, weight_for_ltc, 8, 'AdaptiveCSR')
         total_compute_latency += latency_a
+        # total_compute_latency_delta += latency_delta
         x = self.mlp1_conv(x.flatten(0,1))
         x = self.mlp1_bn(x).reshape(T,B,self.c_hidden,H,W).contiguous()
+        
 
         x = self.mlp2_lif(x)
         x_for_ltc = x
+        delta_x = x_for_ltc[:,1,...] - x_for_ltc[:,0,...]
         weight_for_ltc = self.mlp2_conv.weight.squeeze()
+        latency_delta += calculate_latency_for_mlp_lif_delta_o(delta_x, 'COO')
+        latency_delta_csr += calculate_latency_for_mlp_lif_delta_o(delta_x, 'CSR')
+        latency_delta_acsr += calculate_latency_for_mlp_lif_delta_o(delta_x, 'AdaptiveCSR')
+        # total_compute_latency_delta += latency_delta
         latency_a += calculate_latency_for_mlp_lif_bl(x_for_ltc, weight_for_ltc, 1, 8)
+        latency_delta += calculate_latency_for_mlp_lif_delta_i(delta_x, weight_for_ltc, 8, 'COO')
+        latency_delta_csr += calculate_latency_for_mlp_lif_delta_i(delta_x, weight_for_ltc, 8, 'CSR')
+        latency_delta_acsr += calculate_latency_for_mlp_lif_delta_i(delta_x, weight_for_ltc, 8, 'AdaptiveCSR')
         total_compute_latency += latency_a
+        # total_compute_latency_delta += latency_delta
         x = self.mlp2_conv(x.flatten(0,1))
         x = self.mlp2_bn(x).reshape(T,B,self.c_output,H,W).contiguous()
+        x_for_ltc = self.mlp1_lif(x)
+        delta_x = x_for_ltc[:,1,...] - x_for_ltc[:,0,...]
+        latency_delta += calculate_latency_for_mlp_lif_delta_o(delta_x, 'COO')
+        latency_delta_csr += calculate_latency_for_mlp_lif_delta_o(delta_x, 'CSR')
+        latency_delta_acsr += calculate_latency_for_mlp_lif_delta_o(delta_x, 'AdaptiveCSR')
+        # total_compute_latency_delta += latency_delta
 
-        print(f'MLP Latency:{latency_a}')
+        ns_latency_a = latency_a * (1000/frequency)
+        ns_latency_delta = (latency_delta+latency_a/2) * (1000/frequency)
+        ns_latency_delta_csr = (latency_delta_csr+latency_a/2) * (1000/frequency)
+        ns_latency_delta_acsr = (latency_delta_acsr+latency_a/2) * (1000/frequency)
+        print(f'MLP Latency: {ns_latency_a} ns')
+        print(f'MLP Delta Latency: {ns_latency_delta} ns')
+        print(f'The performance boost Delta brings in MLP: {ns_latency_delta/ns_latency_a}')
+        print(f'MLP Delta Latency CSR: {ns_latency_delta_csr} ns')
+        print(f'The performance boost Delta+CSR brings in MLP: {ns_latency_delta_csr/ns_latency_a}')
+        print(f'MLP Delta Latency AdaptiveCSR: {ns_latency_delta_acsr} ns')
+        print(f'The performance boost Delta+AdaptiveCSR brings in MLP: {ns_latency_delta_acsr/ns_latency_a}')
         return x
 
 
@@ -363,6 +699,10 @@ class SpikingSelfAttention(nn.Module):
     def forward(self, x):
         T,B,C,H,W = x.shape
         global total_compute_latency
+        global total_compute_latency_delta
+        latency_proj_delta = 0
+        latency_proj_delta_csr = 0
+        latency_proj_delta_acsr = 0
         x = self.proj_lif(x)
         
         x = x.flatten(3)
@@ -388,7 +728,7 @@ class SpikingSelfAttention(nn.Module):
         weight_for_ltc = self.q_conv.weight.squeeze(2).unsqueeze(0).repeat(T,1,1,1)
         latency_qkvgen = calculate_latency_for_qkvgen_lif_bl(x_for_qkv_ltc, weight_for_ltc, 1, 8)
         total_compute_latency += latency_qkvgen
-        print(f'QKV generation Latency:{latency_qkvgen}')
+        # print(f'QKV generation Latency:{latency_qkvgen}')
         
         x = k.transpose(-2,-1) @ v
         latency_kvq=0
@@ -402,7 +742,7 @@ class SpikingSelfAttention(nn.Module):
         x = (q @ x) * self.scale
         latency_kvq += calculate_latency_for_qkvmm_lif_bl(q, x, 1, 8)
         total_compute_latency += latency_kvq
-        print(f'Attention Latency:{latency_kvq}')
+        # print(f'Attention Latency:{latency_kvq}')
         # pdb.set_trace()
         # compute_latency = calculate_latency_for_attn(q_conv_out, k_conv_out)
         # total_compute_latency += compute_latency
@@ -415,13 +755,35 @@ class SpikingSelfAttention(nn.Module):
         # total_compute_latency += compute_latency
         # print('linear:', compute_latency, 'total:', total_compute_latency)
 
+        delta_x = x.transpose(-1, -2)[:,1,...] - x.transpose(-1, -2)[:,0,...]
         x = x.flatten(0,1)
         x_for_ltc = x.unsqueeze(1).transpose(-1,-2)
-        weight_for_ltc = self.proj_conv.weight.squeeze(2).unsqueeze(0).repeat(T,1,1,1)
+        weight_for_ltc = self.proj_conv.weight.squeeze(2)
         latency_proj = calculate_latency_for_proj_lif_bl(x_for_ltc, weight_for_ltc, 1, 8)
+        latency_proj_delta += calculate_latency_for_proj_lif_delta_i(delta_x, weight_for_ltc, 8, 'COO')
+        latency_proj_delta_csr += calculate_latency_for_proj_lif_delta_i(delta_x, weight_for_ltc, 8, 'CSR')
+        latency_proj_delta_acsr += calculate_latency_for_proj_lif_delta_i(delta_x, weight_for_ltc, 8, 'AdaptiveCSR')
         total_compute_latency += latency_proj
-        print(f'Projection Latency:{latency_proj}')
+        # total_compute_latency_delta += latency_proj_delta
+        
         x = self.proj_bn(self.proj_conv(x)).reshape(T,B,C,H,W)
+        x_for_ltc = self.proj_lif(x)
+        delta_x = x_for_ltc[:,1,...] - x_for_ltc[:,0,...]
+        latency_proj_delta += calculate_latency_for_mlp_lif_delta_o(delta_x, 'COO')
+        latency_proj_delta_csr += calculate_latency_for_mlp_lif_delta_o(delta_x, 'CSR')
+        latency_proj_delta_acsr += calculate_latency_for_mlp_lif_delta_o(delta_x, 'AdaptiveCSR')
+
+        ns_latency_proj = latency_proj * (1000/frequency)
+        ns_latency_proj_delta = (latency_proj_delta+latency_proj/2) * (1000/frequency)
+        ns_latency_proj_delta_csr = (latency_proj_delta_csr+latency_proj/2) * (1000/frequency)
+        ns_latency_proj_delta_acsr = (latency_proj_delta_acsr+latency_proj/2) * (1000/frequency)
+        print(f'Projection in Attn Block Latency: {ns_latency_proj} ns')
+        print(f'Projection in Attn Block Delta Latency: {ns_latency_proj_delta} ns')
+        print(f'The performance boost Delta brings in Attn Block Projection: {ns_latency_proj_delta/ns_latency_proj}')
+        print(f'Projection in Attn Block Delta Latency CSR: {ns_latency_proj_delta_csr} ns')
+        print(f'The performance boost Delta+CSR brings in Attn Block Projection: {ns_latency_proj_delta_csr/ns_latency_proj}')
+        print(f'Projection in Attn Block Delta Latency AdaptiveCSR: {ns_latency_proj_delta_acsr} ns')
+        print(f'The performance boost Delta+AdaptiveCSR brings in Attn Block Projection: {ns_latency_proj_delta_acsr/ns_latency_proj}')
 
         return x, x_for_qkv.reshape(T,B,C,N).contiguous(), q_conv_out, k_conv_out, v_conv_out
 
@@ -575,11 +937,11 @@ class vit_snn(nn.Module):
 
         block = getattr(self, f"block")
         patch_embed = getattr(self, f"patch_embed")
-        print("Tokenizing...", file=open("sparsity.txt", "a"))
+        # print("Tokenizing...", file=open("sparsity.txt", "a"))
         x, (H, W) = patch_embed(x)
         attn = None
         for block_id, blk in enumerate(block):
-            print('ATTENTION BLOCK', block_id, file=open("sparsity.txt", "a"))
+            # print('ATTENTION BLOCK', block_id, file=open("sparsity.txt", "a"))
             x, x_for_qkv, q, k, v = blk(x)
             # if save:
             #     save_path = './statistics/imagenet/'+'block_'+str(block_id)+'_x.pth'
@@ -596,19 +958,25 @@ class vit_snn(nn.Module):
 
     def forward(self, x):
         latency_proj = 0
+        latency_proj_delta = 0
+        latency_proj_delta_csr = 0
+        latency_proj_delta_acsr = 0
+        latency_s = 0
         x = (x.unsqueeze(0)).repeat(self.T, 1, 1, 1, 1)
         x = self.forward_features(x)
         global total_compute_latency    
+        global total_compute_latency_delta
         proj_lif = MultiStepLIFNode(tau=2.0, detach_reset=True, backend='torch')
-        x_for_ltc = x
+        x_for_ltc = proj_lif(x)
+        delta_x = x_for_ltc[:,1,...] - x_for_ltc[:,0,...]
+        delta_x = delta_x.unsqueeze(3)
         weight_for_ltc = self.head.weight
         latency_proj += calculate_latency_for_mlp_bl(x_for_ltc, weight_for_ltc, 1, 8)
+        latency_proj_delta += calculate_latency_for_mlp_delta_i(delta_x, weight_for_ltc, 8, 'COO')
+        latency_proj_delta_csr += calculate_latency_for_mlp_delta_i(delta_x, weight_for_ltc, 8, 'CSR')
+        latency_proj_delta_acsr += calculate_latency_for_mlp_delta_i(delta_x, weight_for_ltc, 8, 'AdaptiveCSR')
         total_compute_latency += latency_proj
-        print(f'Final MLP Latency:{latency_proj}')
-        # total_compute_latency += calculate_latency_for_mm(proj_lif(x),1000)
-        # physical_latency = total_compute_latency* (1000/frequency) * 1e-9
-
-        # print(f'Latency: {total_compute_latency* (1000/frequency)* 1e-9} s')
+        # total_compute_latency_delta += latency_proj_delta
         # print(f'Total OPS: {total_OPS/1e12} TOPS')
 
         # print(f'Energy Efficiency: {total_OPS / physical_latency / power * 1e-9} TOPS/W')        
@@ -620,8 +988,28 @@ class vit_snn(nn.Module):
         # print('ema spike:',ema[0],'ema weight',ema[1],'ema psum',ema[2])
         # print('BASELINE: ema spike:',ema[0],'ema weight',ema[1] * 8,'ema psum',ema[3])
         # x = self.head(x.mean(0))
-        print(f'Overall latency:{total_compute_latency}')
         x = self.head(x.mean(3).mean(0))
+        delta_x = x[1,:] - x[0,:]
+        latency_s = len(delta_x.nonzero()) * 16 / 8 / 32
+        latency_s_adaptive = len(delta_x.nonzero()) * np.ceil(np.log2(len(delta_x.nonzero()))) / 8 / 32
+        latency_proj_delta += latency_s
+        latency_proj_delta_csr += latency_s
+        latency_proj_delta_acsr += latency_s_adaptive
+        # total_compute_latency_delta += latency_proj_delta
+
+        ns_latency_proj = latency_proj * (1000/frequency)
+        ns_latency_proj_delta = (latency_proj_delta + latency_proj/2) * (1000/frequency)
+        ns_latency_proj_delta_csr = (latency_proj_delta_csr + latency_proj/2) * (1000/frequency)
+        ns_latency_proj_delta_acsr = (latency_proj_delta_acsr + latency_proj/2) * (1000/frequency)
+        print(f'Final MLP Latency: {ns_latency_proj} ns')
+        print(f'Final MLP Delta Latency: {ns_latency_proj_delta} ns')
+        print(f'The performance boost Delta brings in Final MLP: {ns_latency_proj_delta/ns_latency_proj}')
+        print(f'Final MLP Delta Latency CSR: {ns_latency_proj_delta_csr} ns')
+        print(f'The performance boost Delta+CSR brings in Final MLP: {ns_latency_proj_delta_csr/ns_latency_proj}')
+        print(f'Final MLP Delta Latency AdaptiveCSR: {ns_latency_proj_delta_acsr} ns')
+        print(f'The performance boost Delta+AdaptiveCSR brings in Final MLP: {ns_latency_proj_delta_acsr/ns_latency_proj}')
+
+        # print(f'Overall latency:{total_compute_latency}')
         return x
 
 
