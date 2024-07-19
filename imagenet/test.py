@@ -559,6 +559,7 @@ def main():
             f.write(args_text)
 
     try:
+        timewindow = 3
         if args.distributed and args.dist_bn in ('broadcast', 'reduce'):
             if args.local_rank == 0:
                 _logger.info("Distributing BatchNorm running means and vars")
@@ -566,7 +567,7 @@ def main():
         demo_paths_loc = "/root/dataset/adroit-expert-v1.0/pen-v0.pickle"
         demo_paths = pickle.load(open(demo_paths_loc, "rb"))
         load_data = demo_paths[0]["images"] # 100 images
-        eval_metrics = validate(model, load_data, validate_loss_fn, args, amp_autocast=amp_autocast)
+        eval_metrics = validate(model, load_data, validate_loss_fn, args, amp_autocast=amp_autocast, timewindow=timewindow)
         # print('The test metrics is', eval_metrics)
         if model_ema is not None and not args.model_ema_force_cpu:
             if args.distributed and args.dist_bn in ('broadcast', 'reduce'):
@@ -575,7 +576,7 @@ def main():
         pass
 
 
-def validate(model, load_data, loss_fn, args, amp_autocast=suppress, log_suffix=''):
+def validate(model, load_data, loss_fn, args, timewindow, amp_autocast=suppress, log_suffix=''):
     batch_time_m = AverageMeter()
     losses_m = AverageMeter()
     top1_m = AverageMeter()
@@ -588,34 +589,66 @@ def validate(model, load_data, loss_fn, args, amp_autocast=suppress, log_suffix=
     end = time.time()
     last_idx = len(load_data) - 1
     with torch.no_grad():
-        for idx, (input1, input2) in enumerate(zip(load_data[:-1], load_data[1:])):
-            print("INDEX NUMBER:", idx)
-            # if not args.prefetcher:
-            input1 = torch.tensor(input1).float().cuda()
-            input2 = torch.tensor(input2).float().cuda()
-            input = torch.stack([input1, input2], dim=0)
-            # if args.channels_last:
-            #     input = input.contiguous(memory_format=torch.channels_last)
-            # reshape input to 3 * 256 * 256
-            input = input.permute(0,3,1,2)
-            with amp_autocast():
-                output = model(input)
-            # if isinstance(output, (tuple, list)):
-            #     output = output[0]
+        if timewindow == 2:
+            for idx, (input1, input2) in enumerate(zip(load_data[:-1], load_data[1:])):
+                print("INDEX NUMBER:", idx)
+                # if not args.prefetcher:
+                input1 = torch.tensor(input1).float().cuda()
+                input2 = torch.tensor(input2).float().cuda()
+                input = torch.stack([input1, input2], dim=0)
+                # if args.channels_last:
+                #     input = input.contiguous(memory_format=torch.channels_last)
+                # reshape input to 3 * 256 * 256
+                input = input.permute(0,3,1,2)
+                with amp_autocast():
+                    output = model(input)
+                # if isinstance(output, (tuple, list)):
+                #     output = output[0]
 
-            # print(output)
-            # augmentation reduction
-            # reduce_factor = args.tta
-            # if reduce_factor > 1:
-            #     output = output.unfold(0, reduce_factor, reduce_factor).mean(dim=2)
+                # print(output)
+                # augmentation reduction
+                # reduce_factor = args.tta
+                # if reduce_factor > 1:
+                #     output = output.unfold(0, reduce_factor, reduce_factor).mean(dim=2)
 
-            functional.reset_net(model)
+                functional.reset_net(model)
 
-            torch.cuda.synchronize()
+                torch.cuda.synchronize()
 
-            # batch_time_m.update(time.time() - end)
-            # end = time.time()
-            break
+                # batch_time_m.update(time.time() - end)
+                # end = time.time()
+                break
+        elif timewindow == 3:
+            for idx, (input1, input2, input3) in enumerate(zip(load_data[:-2], load_data[1:-1], load_data[2:])):
+                print("INDEX NUMBER:", idx)
+                # if not args.prefetcher:
+                input1 = torch.tensor(input1).float().cuda()
+                input2 = torch.tensor(input2).float().cuda()
+                input3 = torch.tensor(input3).float().cuda()
+                input = torch.stack([input1, input2, input3], dim=0)
+                # if args.channels_last:
+                #     input = input.contiguous(memory_format=torch.channels_last)
+                # reshape input to 3 * 256 * 256
+                input = input.permute(0,3,1,2)
+                with amp_autocast():
+                    output = model(input)
+                # if isinstance(output, (tuple, list)):
+                #     output = output[0]
+
+                # print(output)
+                # augmentation reduction
+                # reduce_factor = args.tta
+                # if reduce_factor > 1:
+                #     output = output.unfold(0, reduce_factor, reduce_factor).mean(dim=2)
+
+                functional.reset_net(model)
+
+                torch.cuda.synchronize()
+
+                # batch_time_m.update(time.time() - end)
+                # end = time.time()
+                break
+
         
     metrics = OrderedDict([('loss', losses_m.avg), ('top1', top1_m.avg), ('top5', top5_m.avg)])
 
